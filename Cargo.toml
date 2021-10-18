@@ -1,0 +1,10 @@
+[package]
+name = 'jdwp'
+version = '0.0.0'
+description = 'A generic JDWP protocol implementation'
+authors = ['Anton Bulakh <self@necauqua.dev>']
+license = 'MIT'
+repository = 'https://github.com/necauqua/jdwp'
+readme = 'readme.md'
+edition = '2018'
+
