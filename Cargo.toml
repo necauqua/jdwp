@@ -1,6 +1,6 @@
 [package]
 name = 'jdwp'
-version = '0.0.0'
+version = '0.1.0'
 description = 'A generic JDWP protocol implementation'
 authors = ['Anton Bulakh <self@necauqua.dev>']
 license = 'MIT'
@@ -8,3 +8,8 @@ repository = 'https://github.com/necauqua/jdwp'
 readme = 'readme.md'
 edition = '2018'
 
+[dependencies]
+jdwp-macros = { path = 'jdwp-macros' }
+
+byteorder = '1.4'
+bitflags = '1.3'
