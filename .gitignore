@@ -1,3 +1,6 @@
 /.idea
 target/
 Cargo.lock
+
+# don't forget about it after running tests locally
+Test.class
