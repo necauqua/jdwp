@@ -1,8 +1,10 @@
-use crate::codec::JdwpWritable;
-use crate::{codec::JdwpReadable, commands::Command, Flags, PacketHeader, PacketMeta};
-use std::io::Cursor;
+use crate::{
+    codec::{JdwpReadable, JdwpWritable},
+    commands::Command,
+    Flags, PacketHeader, PacketMeta,
+};
 use std::{
-    io::{ErrorKind, Read, Write},
+    io::{Cursor, ErrorKind, Read, Write},
     net::{TcpStream, ToSocketAddrs},
 };
 

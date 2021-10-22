@@ -1,5 +1,4 @@
-use jdwp::client::JdwpClient;
-use jdwp::commands::virtual_machine;
+use jdwp::{client::JdwpClient, commands::virtual_machine};
 use std::error::Error;
 
 // this is some CRAZY TESTING fyi

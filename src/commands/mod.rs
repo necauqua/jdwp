@@ -1,7 +1,9 @@
 pub mod virtual_machine;
 
-use crate::codec::{JdwpReadable, JdwpWritable};
-use crate::CommandId;
+use crate::{
+    codec::{JdwpReadable, JdwpWritable},
+    CommandId,
+};
 
 pub(self) use jdwp_macros::jdwp_command;
 

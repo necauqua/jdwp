@@ -1,5 +1,7 @@
-use std::fmt::{Display, Formatter};
-use std::io::{Error, ErrorKind, Read, Write};
+use std::{
+    fmt::{Display, Formatter},
+    io::{Error, ErrorKind, Read, Write},
+};
 
 use bitflags::bitflags;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};

@@ -55,7 +55,7 @@ jobs:
       - name: Test
         run: |
           javac tests/fixtures/Test.java -d .
-          java Test &
+          java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=1044 Test &
 
           cargo test --verbose --all-targets --all-features
 
