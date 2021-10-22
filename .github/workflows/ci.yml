@@ -1,0 +1,154 @@
+name: Rust
+
+on:
+  push:
+    branches: [main, staging, trying]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest ]
+        rust: [ 1.53.0, nightly ]
+        java: [ 8, 11, 17 ]
+    runs-on: ${{ matrix.os }}
+    env:
+      JAVA_VERSION: ${{ matrix.java }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-java@v2
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.os }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          override: true
+
+      - name: Fix cache (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo chown -R $(whoami):$(id -ng) ~/.cargo/
+
+      - name: Setup cache
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: Build
+        run: cargo build --verbose --all-targets --all-features
+
+      - name: Test
+        run: |
+          javac tests/fixtures/Test.java -d .
+          java Test &
+
+          cargo test --verbose --all-targets --all-features
+
+          kill %1
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: rustfmt
+
+      - name: Run rustfmt check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          components: clippy
+
+      - name: Fix cache (Linux)
+        run: sudo chown -R $(whoami):$(id -ng) ~/.cargo/
+
+      - name: Setup cache
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-nightly-clippy-cargo-target-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-nightly-cargo-target-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: Run clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-targets --all-features
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+
+      - name: Fix cache (Linux)
+        run: sudo chown -R $(whoami):$(id -ng) ~/.cargo/
+
+      - name: Setup cache
+        uses: actions/cache@v2
+        id: cache-doc
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-nightly-doc-cargo-target-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-nightly-cargo-target-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: Run doctests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --doc --all-features
+
+      - name: Run docs check
+        uses: actions-rs/cargo@v1
+        env:
+          RUSTDOCFLAGS: "--cfg nightly"
+          RUSTFLAGS: "--cfg nightly"
+        with:
+          command: doc
+          args: --no-deps --all-features
