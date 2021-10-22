@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -10,6 +10,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  ci:
+    name: CI
+    needs: [ test, fmt, clippy, docs ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Done
+        run: exit 0
   test:
     name: Test
     strategy:
