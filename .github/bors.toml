@@ -1,2 +1,3 @@
 status = ['CI']
-delete_merged_branches = true
+delete-merged-branches = true
+use-squash-merge = true
