@@ -1,2 +1,2 @@
-status = ['Test', 'Rustfmt', 'Clippy', 'Docs']
+status = ['CI']
 delete_merged_branches = true
