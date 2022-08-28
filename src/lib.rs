@@ -1,22 +1,26 @@
-#![allow(dead_code)]
+#![deny(missing_debug_implementations, clippy::undocumented_unsafe_blocks)]
 
 extern crate self as jdwp;
 
-use std::io::{Read, Write};
-
-use crate::{
-    codec::{JdwpReadable, JdwpWritable},
-    enums::{ErrorCode, Flags},
+use std::{
+    fmt::{Display, Formatter},
+    io::{Error, ErrorKind, Read, Write},
 };
 
-mod codec;
+use byteorder::WriteBytesExt;
+
+use crate::{
+    codec::{JdwpReadable, JdwpReader, JdwpWritable, JdwpWriter},
+    enums::ErrorCode,
+};
 
 pub mod client;
+pub mod codec;
 pub mod commands;
 pub mod enums;
+pub mod types;
 
-#[repr(C, packed)]
-#[derive(Copy, Clone, Debug, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, JdwpReadable, JdwpWritable)]
 pub struct CommandId {
     command_set: u8,
     command: u8,
@@ -31,51 +35,54 @@ impl CommandId {
     }
 }
 
-#[derive(Copy, Clone)]
-enum PacketMeta {
-    Command(CommandId),
-    Reply(ErrorCode),
+impl Display for CommandId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.command_set, self.command)
+    }
 }
 
-#[derive(Copy, Clone)]
+#[repr(u8)]
+#[derive(Debug, Copy, Clone)]
+enum PacketMeta {
+    Command(CommandId) = 0x00,
+    Reply(ErrorCode) = 0x80,
+}
+
+#[derive(Debug, Copy, Clone)]
 pub struct PacketHeader {
     length: u32,
     id: u32,
-    flags: Flags,
     meta: PacketMeta,
 }
 
 impl JdwpReadable for PacketHeader {
-    fn read<R: Read>(read: &mut R) -> std::io::Result<Self> {
-        let length = u32::read(read)?;
-        let id = u32::read(read)?;
-        let flags = Flags::read(read)?;
-        let meta = match flags {
-            Flags::Command => PacketMeta::Command(CommandId::read(read)?),
-            Flags::Reply => PacketMeta::Reply(ErrorCode::read(read)?),
+    fn read<R: Read>(reader: &mut JdwpReader<R>) -> std::io::Result<Self> {
+        let length = u32::read(reader)?;
+        let id = u32::read(reader)?;
+        let meta = match u8::read(reader)? {
+            0x00 => PacketMeta::Command(CommandId::read(reader)?),
+            0x80 => PacketMeta::Reply(ErrorCode::read(reader)?),
+            _ => Err(Error::from(ErrorKind::InvalidData))?,
         };
-        Ok(PacketHeader {
-            length,
-            id,
-            flags,
-            meta,
-        })
+        Ok(PacketHeader { length, id, meta })
     }
 }
 
 impl JdwpWritable for PacketHeader {
-    fn write<W: Write>(&self, write: &mut W) -> std::io::Result<()> {
-        self.length.write(write)?;
-        self.id.write(write)?;
-        self.flags.write(write)?;
+    fn write<W: Write>(&self, writer: &mut JdwpWriter<W>) -> std::io::Result<()> {
+        self.length.write(writer)?;
+        self.id.write(writer)?;
         match self.meta {
-            PacketMeta::Command(id) => id.write(write),
-            PacketMeta::Reply(error_code) => error_code.write(write),
+            PacketMeta::Command(id) => {
+                // oh well maybe someday we'll be able to get the enum discriminant
+                // (or I make the derive work for such enums)
+                writer.write_u8(0x00)?;
+                id.write(writer)
+            }
+            PacketMeta::Reply(error_code) => {
+                writer.write_u8(0x80)?;
+                error_code.write(writer)
+            }
         }
     }
-}
-
-pub struct Packet<'a> {
-    header: &'a PacketHeader,
-    data: &'a [u8],
 }

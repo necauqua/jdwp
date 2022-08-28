@@ -1,6 +1,7 @@
-/.idea
-target/
-Cargo.lock
+/.direnv
+/coverage
 
-# don't forget about it after running tests locally
-Test.class
+Cargo.lock
+target/
+
+/.idea

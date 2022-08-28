@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main, staging, trying]
+    branches:
+      - main
+      - staging
+      - trying
   pull_request:
     branches: [main]
 
@@ -17,32 +20,36 @@ jobs:
     steps:
       - name: Done
         run: exit 0
+
   test:
-    name: Test
+    name: Run tests (${{ matrix.os.name }}, Rust ${{ matrix.rust.name }}, Java ${{ matrix.java }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-latest, ubuntu-latest ]
-        rust: [ 1.53.0, nightly ]
+        os:
+          - { name: Windows, version: windows-latest }
+          - { name: Linux, version: ubuntu-latest }
+        rust:
+          - { name: MSRV, version: 1.66.1 }
+          - { name: Stable, version: stable }
+          - { name: Nightly, version: nightly }
         java: [ 8, 11, 17 ]
-    runs-on: ${{ matrix.os }}
-    env:
-      JAVA_VERSION: ${{ matrix.java }}
+    runs-on: ${{ matrix.os.version }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - uses: actions/setup-java@v2
         with:
           distribution: 'temurin'
-          java-version: ${{ matrix.java }}
+          java-version: ${{ matrix.java.version }}
 
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: ${{ matrix.rust.version }}
           override: true
 
       - name: Fix cache (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os.version == 'ubuntu-latest'
         run: sudo chown -R $(whoami):$(id -ng) ~/.cargo/
 
       - name: Setup cache
@@ -54,25 +61,21 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ runner.os }}-${{ matrix.rust.version }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}
 
       - name: Build
-        run: cargo build --verbose --all-targets --all-features
+        run: cargo build --all-targets --all-features
 
       - name: Test
         shell: bash
-        run: |
-          javac tests/fixtures/Test.java -d .
-          java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=1044 Test &
+        timeout-minutes: 5 # integration tests can deadlock potentially, and atm testing takes like 0.7s on ryzen 3900xt
+        run: cargo test  --all-targets --all-features
 
-          cargo test --verbose --all-targets --all-features
-
-          kill %1
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - uses: actions-rs/toolchain@v1
         with:
@@ -91,7 +94,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - uses: actions-rs/toolchain@v1
         with:
@@ -124,7 +127,7 @@ jobs:
     name: Docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - uses: actions-rs/toolchain@v1
         with:
