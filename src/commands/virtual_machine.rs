@@ -443,7 +443,7 @@ pub struct GenericClass {
 ///
 /// Only instances that are reachable for the purposes of garbage collection
 /// are counted.
-/// 
+///
 /// If a reference type is invalid, eg. it has been unloaded, zero is returned
 /// for its instance count.
 ///

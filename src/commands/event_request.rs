@@ -56,7 +56,7 @@ pub struct Set {
 ///
 /// If there isn't a matching event request the command is a no-op and does not
 /// result in an error.
-/// 
+///
 /// Automatically generated events do not have a corresponding event request
 /// and may not be cleared using this command.
 #[jdwp_command((), 15, 2)]

@@ -302,7 +302,7 @@ pub struct ThreadDeath {
 /// Notification of a class prepare in the target VM.
 ///
 /// See the JVM specification for a definition of class preparation.
-/// 
+///
 /// Class prepare events are not generated for primitive classes
 /// (for example, `java.lang.Integer.TYPE`).
 #[derive(Debug, JdwpReadable, JdwpWritable)]

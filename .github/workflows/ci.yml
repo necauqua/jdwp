@@ -33,13 +33,13 @@ jobs:
           channel: nightly
           components: rustfmt
 
-      - name: rustfmt
+      - name: Check rustfmt
         run: cargo fmt --check
 
-      - name: clippy
+      - name: Check clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: docs
+      - name: Check docs
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --all-features
@@ -75,10 +75,13 @@ jobs:
         with:
           channel: ${{ matrix.rust.version }}
 
-      - run: cargo build --all-features --all-targets
+      - name: Build
+        run: cargo build --all-features --all-targets
 
-      - run: cargo test --all-features --doc
+      - name: Doctests
+        run: cargo test --all-features --doc
         timeout-minutes: 5
 
-      - run: cargo test --all-features --all-targets
+      - name: Test
+        run: cargo test --all-features --all-targets
         timeout-minutes: 5
