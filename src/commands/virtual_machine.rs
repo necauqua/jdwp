@@ -1,14 +1,13 @@
-use std::io::{Read, Write};
-
 use crate::{
     codec::{JdwpReadable, JdwpWritable},
-    enums::{ClassStatus, TypeTag},
-    CommandId,
+    enums::ClassStatus,
+    types::{ObjectID, ReferenceTypeID, StringID, TaggedReferenceTypeID, ThreadGroupID, ThreadID},
 };
 
 use super::jdwp_command;
 
 /// Returns the JDWP version implemented by the target VM.
+///
 /// The version string format is implementation dependent.
 #[jdwp_command(1, 1)]
 #[derive(Debug, JdwpWritable)]
@@ -19,9 +18,9 @@ pub struct VersionReply {
     /// Text information on the VM version
     pub description: String,
     /// Major JDWP Version number
-    pub version_major: u32,
+    pub version_major: i32,
     /// Minor JDWP Version number
-    pub version_minor: u32,
+    pub version_minor: i32,
     /// Target VM JRE version, as in the java.version property
     pub vm_version: String,
     /// Target VM name, as in the java.vm.name property
@@ -29,83 +28,61 @@ pub struct VersionReply {
 }
 
 /// Returns reference types for all the classes loaded by the target VM which match the given signature.
-/// Multple reference types will be returned if two or more class loaders have loaded a class of the same name.
+///
+/// Multiple reference types will be returned if two or more class loaders have loaded a class of the same name.
+///
 /// The search is confined to loaded classes only; no attempt is made to load a class of the given signature.
-#[jdwp_command(1, 2)]
+#[jdwp_command(Vec<UnnamedClass>, 1, 2)]
 #[derive(Debug, JdwpWritable)]
-pub struct ClassBySignature {
+pub struct ClassesBySignature {
     /// JNI signature of the class to find (for example, "Ljava/lang/String;")
     signature: String,
 }
 
-impl ClassBySignature {
-    pub fn new(signature: impl Into<String>) -> ClassBySignature {
-        ClassBySignature {
-            signature: signature.into(),
-        }
-    }
-}
-
 #[derive(Debug, JdwpReadable)]
 pub struct UnnamedClass {
-    /// Kind of following reference type.
-    pub ref_type_tag: TypeTag,
     /// Matching loaded reference type
-    pub type_id: u64, // todo: use IDSizes somehow
+    pub type_id: TaggedReferenceTypeID,
     /// The current class status
     pub status: ClassStatus,
 }
 
-#[derive(Debug, JdwpReadable)]
-pub struct ClassBySignatureReply {
-    pub classes: Vec<UnnamedClass>,
-}
-
 /// Returns reference types for all classes currently loaded by the target VM.
-#[jdwp_command(1, 3)]
+#[jdwp_command(Vec<Class>, 1, 3)]
 #[derive(Debug, JdwpWritable)]
 pub struct AllClasses;
 
 #[derive(Debug, JdwpReadable)]
 pub struct Class {
-    /// Kind of the reference type.
-    pub ref_type_tag: TypeTag,
-    /// Loaded reference type
-    pub type_id: u64,
+    /// Matching loaded reference type
+    pub type_id: TaggedReferenceTypeID,
     /// The JNI signature of the loaded reference type
     pub signature: String,
     /// The current class status
     pub status: ClassStatus,
 }
 
-#[derive(Debug, JdwpReadable)]
-pub struct AllClassesReply {
-    pub classes: Vec<Class>,
-}
-
 /// Returns all threads currently running in the target VM.
-/// The returned list contains threads created through java.lang.Thread, all native threads attached to the target VM through JNI, and system threads created by the target VM.
-/// Threads that have not yet been started and threads that have completed their execution are not included in the returned list.
-#[jdwp_command(1, 4)]
+///
+/// The returned list contains threads created through java.lang.Thread, all
+/// native threads attached to the target VM through JNI, and system threads
+/// created by the target VM.
+///
+/// Threads that have not yet been started and threads that have completed
+/// their execution are not included in the returned list.
+#[jdwp_command(Vec<ThreadID>, 1, 4)]
 #[derive(Debug, JdwpWritable)]
 pub struct AllThreads;
 
-#[derive(Debug, JdwpReadable)]
-pub struct AllThreadsReply {
-    pub thread_ids: Vec<u64>,
-}
-
-/// Returns all thread groups that do not have a parent. This command may be used as the first step in building a tree (or trees) of the existing thread groups.
-#[jdwp_command(1, 5)]
+/// Returns all thread groups that do not have a parent. This command may be
+/// used as the first step in building a tree (or trees) of the existing thread
+/// groups.
+#[jdwp_command(Vec<ThreadGroupID>, 1, 5)]
 #[derive(Debug, JdwpWritable)]
 pub struct TopLevelThreadGroups;
 
-#[derive(Debug, JdwpReadable)]
-pub struct TopLevelThreadGroupsReply {
-    pub thread_group_id: Vec<u64>,
-}
-
 /// Invalidates this virtual machine mirror.
+///
 /// The communication channel to the target VM is closed, and the target VM
 /// prepares to accept another subsequent connection from this debugger or
 /// another debugger, including the following tasks:
@@ -126,23 +103,24 @@ pub struct TopLevelThreadGroupsReply {
 pub struct Dispose;
 
 /// Returns the sizes of variably-sized data types in the target VM.
+///
 /// The returned values indicate the number of bytes used by the identifiers in command and reply packets.
-#[jdwp_command(1, 7)]
+#[jdwp_command(IDSizeInfo, 1, 7)]
 #[derive(Debug, JdwpWritable)]
 pub struct IDSizes;
 
-#[derive(Debug, JdwpReadable)]
-pub struct IDSizesReply {
+#[derive(Debug, Clone, JdwpReadable)]
+pub struct IDSizeInfo {
     /// field_id size in bytes
-    pub field_id_size: u32,
+    pub field_id_size: i32,
     /// method_id size in bytes
-    pub method_id_size: u32,
+    pub method_id_size: i32,
     /// object_id size in bytes
-    pub object_id_size: u32,
+    pub object_id_size: i32,
     /// reference_type_id size in bytes
-    pub reference_type_id_size: u32,
+    pub reference_type_id_size: i32,
     /// frame_id size in bytes
-    pub frame_id_size: u32,
+    pub frame_id_size: i32,
 }
 
 /// Suspends the execution of the application running in the target VM.
@@ -158,7 +136,9 @@ pub struct Suspend;
 
 /// Resumes execution of the application after the suspend command or an event
 /// has stopped it.
+///
 /// Suspensions of the Virtual Machine and individual threads are counted.
+///
 /// If a particular thread is suspended n times, it must resumed n times before
 /// it will continue.
 #[jdwp_command((), 1, 9)]
@@ -166,50 +146,36 @@ pub struct Suspend;
 pub struct Resume;
 
 /// Terminates the target VM with the given exit code.
+///
 /// On some platforms, the exit code might be truncated, for example, to the
 /// low order 8 bits.
+///
 /// All ids previously returned from the target VM become invalid.
+///
 /// Threads running in the VM are abruptly terminated.
+///
 /// A thread death exception is not thrown and finally blocks are not run.
 #[jdwp_command((), 1, 10)]
 #[derive(Debug, JdwpWritable)]
 pub struct Exit {
-    exit_code: u32,
-}
-
-impl Exit {
-    pub fn new(exit_code: u32) -> Self {
-        Self { exit_code }
-    }
+    exit_code: i32,
 }
 
 /// Creates a new string object in the target VM and returns its id.
-#[jdwp_command(1, 11)]
+#[jdwp_command(StringID, 1, 11)]
 #[derive(Debug, JdwpWritable)]
 pub struct CreateString {
     /// UTF-8 characters to use in the created string
     string: String,
 }
 
-impl CreateString {
-    pub fn new(string: impl Into<String>) -> Self {
-        Self {
-            string: string.into(),
-        }
-    }
-}
-
-#[derive(Debug, JdwpReadable)]
-pub struct CreateStringReply {
-    /// Created string (instance of java.lang.String)
-    pub string_id: u64,
-}
-
 /// Retrieve this VM's capabilities.
+///
 /// The capabilities are returned as booleans, each indicating the presence or
 /// absence of a capability.
+///
 /// The commands associated with each capability will return the
-/// NOT_IMPLEMENTED error if the cabability is not available.
+/// NOT_IMPLEMENTED error if the capability is not available.
 #[jdwp_command(1, 12)]
 #[derive(Debug, JdwpWritable)]
 pub struct Capabilities;
@@ -228,7 +194,7 @@ pub struct CapabilitiesReply {
     /// (that is, can the VM determine if the method or the field was invented
     /// by the compiler?)
     pub can_get_synthetic_attribute: bool,
-    /// Can the VM get the owned monitors infornation for a thread?
+    /// Can the VM get the owned monitors information for a thread?
     pub can_get_owned_monitor_info: bool,
     /// Can the VM get the current contended monitor of a thread?
     pub can_get_current_contended_monitor: bool,
@@ -237,7 +203,9 @@ pub struct CapabilitiesReply {
 }
 
 /// Retrieve the classpath and bootclasspath of the target VM.
+///
 /// If the classpath is not defined, returns an empty list.
+///
 /// If the bootclasspath is not defined returns an empty list.
 #[jdwp_command(1, 13)]
 #[derive(Debug, JdwpWritable)]
@@ -255,36 +223,44 @@ pub struct ClassPathsReply {
 
 #[derive(Debug, JdwpWritable)]
 pub struct ObjectRef {
-    object: u64,
-    ref_cnt: u32,
+    object: ObjectID,
+    ref_cnt: i32,
 }
 
 impl ObjectRef {
-    pub fn new(object: u64, ref_cnt: u32) -> Self {
+    pub fn new(object: ObjectID, ref_cnt: i32) -> Self {
         Self { object, ref_cnt }
     }
 }
 
 /// Releases a list of object IDs.
+///
 /// For each object in the list, the following applies.
+///
 /// The count of references held by the back-end (the reference count) will be
 /// decremented by ref_cnt.
+///
 /// If thereafter the reference count is less than or equal to zero, the ID is
 /// freed.
+///
 /// Any back-end resources associated with the freed ID may be freed, and if
 /// garbage collection was disabled for the object, it will be re-enabled.
+///
 /// The sender of this command promises that no further commands will be sent
 /// referencing a freed ID.
 ///
 /// Use of this command is not required.
+///
 /// If it is not sent, resources associated with each ID will be freed by the
 /// back-end at some time after the corresponding object is garbage collected.
+///
 /// It is most useful to use this command to reduce the load on the back-end if
 /// a very large number of objects has been retrieved from the back-end (a large
 /// array, for example) but may not be garbage collected any time soon.
 ///
 /// IDs may be re-used by the back-end after they have been freed with this
 /// command.
+///
 /// This description assumes reference counting, a back-end may use any
 /// implementation which operates equivalently.
 #[jdwp_command((), 1, 14)]
@@ -293,19 +269,16 @@ pub struct DisposeObjects {
     requests: Vec<ObjectRef>,
 }
 
-impl DisposeObjects {
-    pub fn new(requests: Vec<ObjectRef>) -> Self {
-        Self { requests }
-    }
-}
-
 /// Tells the target VM to stop sending events. Events are not discarded; they
 /// are held until a subsequent ReleaseEvents command is sent.
+///
 /// This command is useful to control the number of events sent to the debugger
 /// VM in situations where very large numbers of events are generated.
+///
 /// While events are held by the debugger back-end, application execution may
 /// be frozen by the debugger back-end to prevent buffer overflows on the back
 /// end.
+///
 /// Responses to commands are never held and are not affected by this command.
 /// If events are already being held, this command is ignored.
 #[jdwp_command((), 1, 15)]
@@ -313,7 +286,9 @@ impl DisposeObjects {
 pub struct HoldEvents;
 
 /// Tells the target VM to continue sending events.
+///
 /// This command is used to restore normal activity after a HoldEvents command.
+///
 /// If there is no current HoldEvents command in effect, this command is
 /// ignored.
 #[jdwp_command((), 1, 16)]
@@ -321,10 +296,13 @@ pub struct HoldEvents;
 pub struct ReleaseEvents;
 
 /// Retrieve all of this VM's capabilities.
+///
 /// The capabilities are returned as booleans, each indicating the presence or
 /// absence of a capability.
+///
 /// The commands associated with each capability will return the
-/// NOT_IMPLEMENTED error if the cabability is not available.
+/// NOT_IMPLEMENTED error if the capability is not available.
+///
 /// Since JDWP version 1.4.
 #[jdwp_command(1, 17)]
 #[derive(Debug, JdwpWritable)]
@@ -339,7 +317,7 @@ pub struct CapabilitiesNewReply {
     pub can_redefine_classes: bool,
     /// Can the VM add methods when redefining classes?
     pub can_add_method: bool,
-    /// Can the VM redefine classesin arbitrary ways?
+    /// Can the VM redefine classes in arbitrary ways?
     pub can_unrestrictedly_redefine_classes: bool,
     /// Can the VM pop stack frames?
     pub can_pop_frames: bool,
@@ -390,28 +368,33 @@ pub struct CapabilitiesNewReply {
 #[derive(Debug, JdwpWritable)]
 pub struct RedefiningClass {
     /// The reference type.
-    ref_type: u64,
+    ref_type: ReferenceTypeID,
     /// Bytes defining class in JVM class file format.
     bytes: Vec<u8>,
 }
 
 impl RedefiningClass {
-    pub fn new(ref_type: u64, bytes: Vec<u8>) -> Self {
+    pub fn new(ref_type: ReferenceTypeID, bytes: Vec<u8>) -> Self {
         Self { ref_type, bytes }
     }
 }
 
 /// Installs new class definitions.
+///
 /// If there are active stack frames in methods of the redefined classes in the
 /// target VM then those active frames continue to run the bytecodes of the
-/// original method. These methods are considered obsolete - see [IsObsolete].
+/// original method. These methods are considered obsolete - see IsObsolete.
+///
 /// The methods in the redefined classes will be used for new invokes in the
 /// target VM. The original method ID refers to the redefined method.
+///
 /// All breakpoints in the redefined classes are cleared.
-/// If resetting of stack frames is desired, the [PopFrames] command can be
+///
+/// If resetting of stack frames is desired, the PopFrames command can be
 /// used to pop frames with obsolete methods.
 ///
 /// Requires `can_redefine_classes` capability - see [CapabilitiesNew].
+///
 /// In addition to the `can_redefine_classes` capability, the target VM must
 /// have the `can_add_method` capability to add methods when redefining classes,
 /// or the `can_unrestrictedly_redefine_classes` to redefine classes in
@@ -420,12 +403,6 @@ impl RedefiningClass {
 #[derive(Debug, JdwpWritable)]
 pub struct RedefineClasses {
     classes: Vec<RedefiningClass>,
-}
-
-impl RedefineClasses {
-    pub fn new(classes: Vec<RedefiningClass>) -> Self {
-        Self { classes }
-    }
 }
 
 /// Set the default stratum. Requires `can_set_default_stratum` capability -
@@ -437,30 +414,23 @@ pub struct SetDefaultStratum {
     stratum_id: String,
 }
 
-impl SetDefaultStratum {
-    pub fn new(stratum_id: impl Into<String>) -> Self {
-        Self {
-            stratum_id: stratum_id.into(),
-        }
-    }
-}
-
 /// Returns reference types for all classes currently loaded by the target VM.
+///
 /// Both the JNI signature and the generic signature are returned for each
 /// class.
+///
 /// Generic signatures are described in the signature attribute section in
 /// The Java™ Virtual Machine Specification.
+///
 /// Since JDWP version 1.5.
-#[jdwp_command(1, 20)]
+#[jdwp_command(Vec<GenericClass>, 1, 20)]
 #[derive(Debug, JdwpWritable)]
 pub struct AllClassesWithGeneric;
 
 #[derive(Debug, JdwpReadable)]
 pub struct GenericClass {
-    /// Kind of following reference type.
-    pub ref_type_tag: TypeTag,
     /// Loaded reference type
-    pub type_id: u64,
+    pub type_id: TaggedReferenceTypeID,
     /// The JNI signature of the loaded reference type
     pub signature: String,
     /// The generic signature of the loaded reference type or an empty string if there is none.
@@ -469,34 +439,19 @@ pub struct GenericClass {
     pub status: ClassStatus,
 }
 
-#[derive(Debug, JdwpReadable)]
-pub struct AllClassesWithGenericReply {
-    pub classes: Vec<GenericClass>,
-}
-
 /// Returns the number of instances of each reference type in the input list.
+///
 /// Only instances that are reachable for the purposes of garbage collection
 /// are counted.
+///
 /// If a reference type is invalid, eg. it has been unloaded, zero is returned
 /// for its instance count.
 ///
 /// Since JDWP version 1.6. Requires canGetInstanceInfo capability - see
 /// [CapabilitiesNew].
-#[jdwp_command(1, 21)]
+#[jdwp_command(Vec<i64>, 1, 21)]
 #[derive(Debug, JdwpWritable)]
 pub struct InstanceCounts {
     /// A list of reference type IDs.
-    ref_types: Vec<u64>,
-}
-
-impl InstanceCounts {
-    pub fn new(ref_types: Vec<u64>) -> Self {
-        Self { ref_types }
-    }
-}
-
-#[derive(Debug, JdwpReadable)]
-pub struct InstanceCountsReply {
-    /// The numbers of instances for the corresponding reference types.
-    pub instance_counts: Vec<u64>,
+    ref_types: Vec<ReferenceTypeID>,
 }

@@ -1,0 +1,36 @@
+name: Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - uses: moonrepo/setup-rust@v0
+        with:
+          channel: stable
+          components: llvm-tools-preview
+          bins: cargo-llvm-cov
+
+      - name: Collect coverage
+        run: cargo llvm-cov --all-features --workspace --codecov --output-path codecov.json
+
+      - uses: codecov/codecov-action@v3
+        with:
+          files: codecov.json
+          fail_ci_if_error: true

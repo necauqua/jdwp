@@ -1,4 +1,4 @@
-public final class Test {
+public final class Basic {
 
     public long ticks = 0;
 
@@ -7,7 +7,8 @@ public final class Test {
     }
 
     public void start() {
-        System.out.println("Started");
+        // write a few bytes to stdout once we're running
+        System.out.println("up");
         while (true) {
             tick();
             try {
@@ -16,11 +17,9 @@ public final class Test {
                 break;
             }
         }
-        System.out.println("Finished");
     }
 
     public static void main(String[] args) throws Exception {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> System.out.println("Shutdown")));
-        new Test().start();
+        new Basic().start();
     }
 }
