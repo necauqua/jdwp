@@ -45,7 +45,7 @@ jobs:
         run: cargo doc --all-features
 
   test:
-    name: Test (${{ matrix.os.name }}, Rust ${{ matrix.rust.name }}, Java ${{ matrix.java }})
+    name: Test (${{ matrix.os.name }}, rust ${{ matrix.rust.name }}, java ${{ matrix.java }})
     needs:
       - checks
     strategy:
@@ -66,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: actions/setup-java@v2
+      - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
