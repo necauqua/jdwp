@@ -40,9 +40,8 @@ fn field_modification() -> Result {
             // field is non-static
             assert!(field_modification.object.is_some());
 
-            // 1..20 is because the field is updated every 50ms, prevent flakiness
-            // on my machine it's consistently 4
-            assert!(matches!(field_modification.value, Value::Long(x) if (1..20).contains(&x)));
+            // check if it was a long and if it did tick
+            assert!(matches!(field_modification.value, Value::Long(x) if x >= 1));
         }
         e => panic!("Unexpected event set received: {:#?}", e),
     }

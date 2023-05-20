@@ -55,6 +55,10 @@ pub struct PacketHeader {
     meta: PacketMeta,
 }
 
+impl PacketHeader {
+    pub(crate) const JDWP_SIZE: usize = 11;
+}
+
 impl JdwpReadable for PacketHeader {
     fn read<R: Read>(reader: &mut JdwpReader<R>) -> std::io::Result<Self> {
         let length = u32::read(reader)?;

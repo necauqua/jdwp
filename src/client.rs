@@ -117,7 +117,7 @@ impl JdwpClient {
         ))?;
 
         let header = PacketHeader {
-            length: 11 + data.len() as u32,
+            length: (PacketHeader::JDWP_SIZE + data.len()) as u32,
             id,
             meta: PacketMeta::Command(C::ID),
         };
@@ -126,7 +126,7 @@ impl JdwpClient {
         self.writer.write_all(&data)?;
 
         log::trace!(
-            "sent packet #{} with command: {}, payload: {:#?}",
+            "[{:x}] sent {} command: {:?}",
             header.id,
             C::ID,
             command
@@ -162,7 +162,7 @@ impl JdwpClient {
             self.writer.id_sizes.clone(),
         ))?;
 
-        log::trace!("read (packet #{}) {:#?}", header.id, result);
+        log::trace!("[{:x}] data: {:#?}", header.id, result);
 
         if cursor.position() < len as u64 {
             Err(ClientError::TooMuchDataReceived {
@@ -181,12 +181,9 @@ fn read_packet(
     host_events_tx: &Sender<Composite>,
 ) -> Result<(), ClientError> {
     let header = PacketHeader::read(reader)?;
-    let mut data = vec![0; header.length as usize - 11];
-    // ^ size of the header is 11 bytes
+    let mut data = vec![0; header.length as usize - PacketHeader::JDWP_SIZE];
 
     reader.read_exact(&mut data)?;
-
-    log::trace!("received (packet #{}), {:#?}", header.id, header);
 
     let to_send = match header.meta {
         // handle the host-sent commands;
@@ -196,6 +193,9 @@ fn read_packet(
                 &mut Cursor::new(data),
                 reader.id_sizes.clone(),
             ))?;
+
+            log::trace!("[host] event: {:#?}", composite);
+
             host_events_tx.send(composite).unwrap();
             return Ok(());
         }
@@ -209,6 +209,8 @@ fn read_packet(
         PacketMeta::Reply(ErrorCode::None) => Ok(data),
         PacketMeta::Reply(error_code) => Err(ClientError::HostError(error_code)),
     };
+
+    log::trace!("[{:x}] reply, len {}", header.id, header.length);
 
     match waiting.lock().unwrap().try_remove(header.id as usize) {
         Some(waiter) => waiter.send(to_send).unwrap(), // one-shot channel send
