@@ -125,12 +125,7 @@ impl JdwpClient {
         header.write(&mut self.writer)?;
         self.writer.write_all(&data)?;
 
-        log::trace!(
-            "[{:x}] sent {} command: {:?}",
-            header.id,
-            C::ID,
-            command
-        );
+        log::trace!("[{:x}] sent {} command: {:?}", header.id, C::ID, command);
 
         // special handling for the dispose command because
         // we don't always get the response header for it
