@@ -1,9 +1,10 @@
 use std::{
     error::Error,
+    format,
     io::{BufRead, BufReader},
     net::TcpListener,
     ops::{Deref, DerefMut},
-    process::{Child, Command, Stdio}, format,
+    process::{Child, Command, Stdio},
 };
 
 use jdwp::client::JdwpClient;
@@ -60,7 +61,8 @@ fn ensure_fixture_is_compiled(fixture: &str) -> Result<String> {
     if std::fs::metadata(&class).is_ok() {
         return Ok(capitalized);
     }
-    let lock = named_lock::NamedLock::create(&format!("jdwp_tests_java_fixture_compilation_{fixture}"))?;
+    let lock =
+        named_lock::NamedLock::create(&format!("jdwp_tests_java_fixture_compilation_{fixture}"))?;
     let _guard = lock.lock()?;
 
     if std::fs::metadata(&class).is_ok() {
@@ -72,7 +74,11 @@ fn ensure_fixture_is_compiled(fixture: &str) -> Result<String> {
     log::info!("Compiling the java fixture: {fixture}");
 
     Command::new("javac")
-        .args([&format!("tests/fixtures/{}.java", capitalized), "-d", "target/java"])
+        .args([
+            &format!("tests/fixtures/{}.java", capitalized),
+            "-d",
+            "target/java",
+        ])
         .stderr(Stdio::null())
         .spawn()?
         .wait()?;
