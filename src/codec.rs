@@ -118,7 +118,7 @@ impl JdwpReadable for bool {
 impl JdwpWritable for bool {
     #[inline]
     fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
-        write.write_u8(if *self { 1 } else { 0 })
+        write.write_u8(u8::from(*self))
     }
 }
 

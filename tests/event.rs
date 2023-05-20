@@ -16,7 +16,11 @@ fn field_modification() -> Result {
 
     let type_id = client.send(ClassesBySignature::new("LBasic;"))?[0].type_id;
 
-    let ticks = &client.send(Fields::new(*type_id))?[0];
+    let ticks = &client
+        .send(Fields::new(*type_id))?
+        .into_iter()
+        .find(|f| f.name == "ticks")
+        .unwrap();
 
     let request_id = client.send(event_request::Set::new(
         EventKind::FieldModification,

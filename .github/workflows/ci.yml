@@ -17,127 +17,47 @@ jobs:
   ci: # this is likely not needed, but I'm not 100% sure
     name: CI
     needs:
-      - fmt
-      - clippy
-      - docs
       - test
-
     runs-on: ubuntu-latest
     steps:
       - name: Done
         run: exit 0
 
-  fmt:
-    name: Rustfmt
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@v1
+      - uses: moonrepo/setup-rust@v0
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
+          channel: nightly
           components: rustfmt
 
-      - name: Run rustfmt check
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+      - name: rustfmt
+        run: cargo fmt --check
 
-  clippy:
-    name: Clippy
-    needs:
-      - fmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+      - name: clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-          components: clippy
-
-      - name: Fix cache (Linux)
-        run: sudo chown -R $(whoami):$(id -ng) ~/.cargo/
-
-      - name: Setup cache
-        uses: actions/cache@v2
-        id: cache
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-nightly-clippy-cargo-target-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: ${{ runner.os }}-nightly-cargo-target-${{ hashFiles('**/Cargo.toml') }}
-
-      - name: Run clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features
-
-  docs:
-    name: Docs
-    needs:
-      - clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-
-      - name: Fix cache (Linux)
-        run: sudo chown -R $(whoami):$(id -ng) ~/.cargo/
-
-      - name: Setup cache
-        uses: actions/cache@v2
-        id: cache-doc
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-nightly-doc-cargo-target-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: ${{ runner.os }}-nightly-cargo-target-${{ hashFiles('**/Cargo.toml') }}
-
-      - name: Run doctests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --doc --all-features
-
-      - name: Run docs check
-        uses: actions-rs/cargo@v1
+      - name: docs
         env:
-          RUSTDOCFLAGS: "--cfg nightly"
-          RUSTFLAGS: "--cfg nightly"
-        with:
-          command: doc
-          args: --no-deps --all-features
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --all-features
 
   test:
-    name: Run tests (${{ matrix.os.name }}, Rust ${{ matrix.rust.name }}, Java ${{ matrix.java }})
+    name: Test (${{ matrix.os.name }}, Rust ${{ matrix.rust.name }}, Java ${{ matrix.java }})
     needs:
-      - docs
+      - checks
     strategy:
       fail-fast: false
       matrix:
         os:
-          - { name: Windows, version: windows-latest }
-          - { name: Linux, version: ubuntu-latest }
+          - { name: win, version: windows-latest }
+          - { name: linux, version: ubuntu-latest }
         rust:
           - { name: MSRV, version: 1.66.1 }
-          - { name: Stable, version: stable }
-          - { name: Nightly, version: nightly }
+          - { name: stable, version: stable }
+          - { name: nightly, version: nightly }
         java:
           - 8
           - 11
@@ -151,30 +71,14 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
 
-      - uses: actions-rs/toolchain@v1
+      - uses: moonrepo/setup-rust@v0
         with:
-          toolchain: ${{ matrix.rust.version }}
-          override: true
+          channel: ${{ matrix.rust.version }}
 
-      - name: Fix cache (Linux)
-        if: matrix.os.version == 'ubuntu-latest'
-        run: sudo chown -R $(whoami):$(id -ng) ~/.cargo/
+      - run: cargo build --all-features --all-targets
 
-      - name: Setup cache
-        uses: actions/cache@v2
-        id: cache
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.rust.version }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}
+      - run: cargo test --all-features --doc
+        timeout-minutes: 5
 
-      - name: Build
-        run: cargo build --all-targets --all-features
-
-      - name: Test
-        shell: bash
-        timeout-minutes: 5 # integration tests can deadlock potentially, and atm testing takes like 0.7s on ryzen 3900xt
-        run: cargo test  --all-targets --all-features
+      - run: cargo test --all-features --all-targets
+        timeout-minutes: 5

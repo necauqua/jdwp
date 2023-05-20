@@ -136,7 +136,9 @@ pub struct Suspend;
 
 /// Resumes execution of the application after the suspend command or an event
 /// has stopped it.
+///
 /// Suspensions of the Virtual Machine and individual threads are counted.
+///
 /// If a particular thread is suspended n times, it must resumed n times before
 /// it will continue.
 #[jdwp_command((), 1, 9)]
@@ -144,10 +146,14 @@ pub struct Suspend;
 pub struct Resume;
 
 /// Terminates the target VM with the given exit code.
+///
 /// On some platforms, the exit code might be truncated, for example, to the
 /// low order 8 bits.
+///
 /// All ids previously returned from the target VM become invalid.
+///
 /// Threads running in the VM are abruptly terminated.
+///
 /// A thread death exception is not thrown and finally blocks are not run.
 #[jdwp_command((), 1, 10)]
 #[derive(Debug, JdwpWritable)]
@@ -164,8 +170,10 @@ pub struct CreateString {
 }
 
 /// Retrieve this VM's capabilities.
+///
 /// The capabilities are returned as booleans, each indicating the presence or
 /// absence of a capability.
+///
 /// The commands associated with each capability will return the
 /// NOT_IMPLEMENTED error if the capability is not available.
 #[jdwp_command(1, 12)]
@@ -195,7 +203,9 @@ pub struct CapabilitiesReply {
 }
 
 /// Retrieve the classpath and bootclasspath of the target VM.
+///
 /// If the classpath is not defined, returns an empty list.
+///
 /// If the bootclasspath is not defined returns an empty list.
 #[jdwp_command(1, 13)]
 #[derive(Debug, JdwpWritable)]
@@ -224,25 +234,33 @@ impl ObjectRef {
 }
 
 /// Releases a list of object IDs.
+///
 /// For each object in the list, the following applies.
+///
 /// The count of references held by the back-end (the reference count) will be
 /// decremented by ref_cnt.
+///
 /// If thereafter the reference count is less than or equal to zero, the ID is
 /// freed.
+///
 /// Any back-end resources associated with the freed ID may be freed, and if
 /// garbage collection was disabled for the object, it will be re-enabled.
+///
 /// The sender of this command promises that no further commands will be sent
 /// referencing a freed ID.
 ///
 /// Use of this command is not required.
+///
 /// If it is not sent, resources associated with each ID will be freed by the
 /// back-end at some time after the corresponding object is garbage collected.
+///
 /// It is most useful to use this command to reduce the load on the back-end if
 /// a very large number of objects has been retrieved from the back-end (a large
 /// array, for example) but may not be garbage collected any time soon.
 ///
 /// IDs may be re-used by the back-end after they have been freed with this
 /// command.
+///
 /// This description assumes reference counting, a back-end may use any
 /// implementation which operates equivalently.
 #[jdwp_command((), 1, 14)]
@@ -253,11 +271,14 @@ pub struct DisposeObjects {
 
 /// Tells the target VM to stop sending events. Events are not discarded; they
 /// are held until a subsequent ReleaseEvents command is sent.
+///
 /// This command is useful to control the number of events sent to the debugger
 /// VM in situations where very large numbers of events are generated.
+///
 /// While events are held by the debugger back-end, application execution may
 /// be frozen by the debugger back-end to prevent buffer overflows on the back
 /// end.
+///
 /// Responses to commands are never held and are not affected by this command.
 /// If events are already being held, this command is ignored.
 #[jdwp_command((), 1, 15)]
@@ -265,7 +286,9 @@ pub struct DisposeObjects {
 pub struct HoldEvents;
 
 /// Tells the target VM to continue sending events.
+///
 /// This command is used to restore normal activity after a HoldEvents command.
+///
 /// If there is no current HoldEvents command in effect, this command is
 /// ignored.
 #[jdwp_command((), 1, 16)]
@@ -273,10 +296,13 @@ pub struct HoldEvents;
 pub struct ReleaseEvents;
 
 /// Retrieve all of this VM's capabilities.
+///
 /// The capabilities are returned as booleans, each indicating the presence or
 /// absence of a capability.
+///
 /// The commands associated with each capability will return the
 /// NOT_IMPLEMENTED error if the capability is not available.
+///
 /// Since JDWP version 1.4.
 #[jdwp_command(1, 17)]
 #[derive(Debug, JdwpWritable)]
@@ -354,16 +380,21 @@ impl RedefiningClass {
 }
 
 /// Installs new class definitions.
+///
 /// If there are active stack frames in methods of the redefined classes in the
 /// target VM then those active frames continue to run the bytecodes of the
-/// original method. These methods are considered obsolete - see [IsObsolete].
+/// original method. These methods are considered obsolete - see IsObsolete.
+///
 /// The methods in the redefined classes will be used for new invokes in the
 /// target VM. The original method ID refers to the redefined method.
+///
 /// All breakpoints in the redefined classes are cleared.
-/// If resetting of stack frames is desired, the [PopFrames] command can be
+///
+/// If resetting of stack frames is desired, the PopFrames command can be
 /// used to pop frames with obsolete methods.
 ///
 /// Requires `can_redefine_classes` capability - see [CapabilitiesNew].
+///
 /// In addition to the `can_redefine_classes` capability, the target VM must
 /// have the `can_add_method` capability to add methods when redefining classes,
 /// or the `can_unrestrictedly_redefine_classes` to redefine classes in
@@ -384,10 +415,13 @@ pub struct SetDefaultStratum {
 }
 
 /// Returns reference types for all classes currently loaded by the target VM.
+///
 /// Both the JNI signature and the generic signature are returned for each
 /// class.
+///
 /// Generic signatures are described in the signature attribute section in
 /// The Java™ Virtual Machine Specification.
+///
 /// Since JDWP version 1.5.
 #[jdwp_command(Vec<GenericClass>, 1, 20)]
 #[derive(Debug, JdwpWritable)]
@@ -406,8 +440,10 @@ pub struct GenericClass {
 }
 
 /// Returns the number of instances of each reference type in the input list.
+///
 /// Only instances that are reachable for the purposes of garbage collection
 /// are counted.
+/// 
 /// If a reference type is invalid, eg. it has been unloaded, zero is returned
 /// for its instance count.
 ///

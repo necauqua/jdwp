@@ -31,7 +31,7 @@ macro_rules! docs {
 /// collection of the object.
 /// Any attempt to access a a garbage collected object with its object ID will
 /// result in the INVALID_OBJECT error code.
-/// Garbage collection can be disabled with the [DisableCollection] command,
+/// Garbage collection can be disabled with the DisableCollection command,
 /// but it is not usually necessary to do so.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct ObjectID(u64);
@@ -503,12 +503,12 @@ tagged_io! {
     {}
 }
 
-/// A tagged representation of [ReferenceID], similar to how [TaggedObjectID]
+/// A tagged representation of [ReferenceTypeID], similar to how [TaggedObjectID]
 /// is a representation of the [ObjectID].
 ///
 /// This construct is not separated into a separate value type in JDWP spec and
 /// exists only here in Rust, in JDWP it's usually represented by a pair of
-/// [TypeTag] and [ReferenceID] values.
+/// [TypeTag] and [ReferenceTypeID] values.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum TaggedReferenceTypeID {
     /// a class reference
@@ -829,7 +829,7 @@ pub struct InstanceOnly {
 /// Since JDWP version 1.6.
 ///
 /// Requires the `can_use_source_name_filters` capability - see
-/// [CapabilitiesNew].
+/// [CapabilitiesNew](crate::commands::virtual_machine::CapabilitiesNew).
 #[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
 pub struct SourceNameMatch {
     /// Required source name pattern.

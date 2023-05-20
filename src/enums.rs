@@ -200,10 +200,10 @@ readable_enum! {
 readable_enum! {
     Tag: u8,
 
-    Array = 91 | "'[' - an array object ([ObjectID] size).",
+    Array = 91 | "'[' - an array object ([ObjectID](crate::types::ObjectID) size).",
     Byte = 66 | "'B' - a byte value (1 byte).",
     Char = 67 | "'C' - a character value (2 bytes).",
-    Object = 76 | "'L' - an object ([ObjectID] size).",
+    Object = 76 | "'L' - an object ([ObjectID](crate::types::ObjectID) size).",
     Float = 70 | "'F' - a float value (4 bytes).",
     Double = 68 | "'D' - a double value (8 bytes).",
     Int = 73 | "'I' - an int value (4 bytes).",
@@ -211,11 +211,11 @@ readable_enum! {
     Short = 83 | "'S' - a short value (2 bytes).",
     Void = 86 | "'V' - a void value (no bytes).",
     Boolean = 90 | "'Z' - a boolean value (1 byte).",
-    String = 115 | "'s' - a String object ([ObjectID] size).",
-    Thread = 116 | "'t' - a Thread object ([ObjectID] size).",
-    ThreadGroup = 103 | "'g' - a ThreadGroup object ([ObjectID] size).",
-    ClassLoader = 108 | "'l' - a ClassLoader object ([ObjectID] size).",
-    ClassObject = 99 | "'c' - a class object object ([ObjectID] size).",
+    String = 115 | "'s' - a String object ([ObjectID](crate::types::ObjectID) size).",
+    Thread = 116 | "'t' - a Thread object ([ObjectID](crate::types::ObjectID) size).",
+    ThreadGroup = 103 | "'g' - a ThreadGroup object ([ObjectID](crate::types::ObjectID) size).",
+    ClassLoader = 108 | "'l' - a ClassLoader object ([ObjectID](crate::types::ObjectID) size).",
+    ClassObject = 99 | "'c' - a class object object ([ObjectID](crate::types::ObjectID) size).",
 }
 
 readable_enum! {

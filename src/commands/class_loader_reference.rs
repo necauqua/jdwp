@@ -6,6 +6,7 @@ use crate::{
 
 /// Returns a list of all classes which this class loader has been requested to
 /// load.
+///
 /// This class loader is considered to be an initiating class loader for each
 /// class in the returned list. The list contains each reference type defined
 /// by this loader and any types for which loading was delegated by this class
@@ -13,7 +14,9 @@ use crate::{
 ///
 /// The visible class list has useful properties with respect to the type
 /// namespace.
+///
 /// A particular type name will occur at most once in the list.
+///
 /// Each field or variable declared with that type name in a class defined by
 /// this class loader must be resolved to that single type.
 ///

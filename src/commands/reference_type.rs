@@ -9,6 +9,7 @@ use crate::{
 };
 
 /// Returns the JNI signature of a reference type.
+///
 /// JNI signature formats are described in the Java Native Interface
 /// Specification.
 ///
@@ -35,8 +36,10 @@ pub struct ClassLoader {
 }
 
 /// Returns the modifiers (also known as access flags) for a reference type.
+///
 /// The returned bit mask contains information on the declaration of the
 /// reference type.
+///
 /// If the reference type is an array or a primitive class (for example,
 /// `java.lang.Integer.TYPE`), the value of the returned bit mask is undefined.
 #[jdwp_command(i32, 2, 3)]
@@ -46,8 +49,11 @@ pub struct Modifiers {
 }
 
 /// Returns information for each field in a reference type.
+///
 /// Inherited fields are not included.
+///
 /// The field list will include any synthetic fields created by the compiler.
+///
 /// Fields are returned in the order they occur in the class file.
 #[jdwp_command(Vec<Field>, 2, 4)]
 #[derive(Debug, JdwpWritable)]
@@ -65,18 +71,23 @@ pub struct Field {
     pub signature: String,
     /// The modifier bit flags (also known as access flags) which provide
     /// additional information on the field declaration.
+    ///
     /// Individual flag values are defined in Chapter 4 of The Java™ Virtual
     /// Machine Specification.
+    ///
     /// In addition, the 0xf0000000 bit identifies the field as synthetic, if
     /// the synthetic attribute capability is available.
     pub mod_bits: i32,
 }
 
 /// Returns information for each method in a reference type.
+///
 /// Inherited methods are not included.
+///
 /// The list of methods will include constructors (identified with the name
-/// "<init>"), the initialization method (identified with the name "<clinit>")
+/// "&lt;init>"), the initialization method (identified with the name "&lt;clinit>")
 /// if present, and any synthetic methods created by the compiler.
+///
 /// Methods are returned in the order they occur in the class file.
 #[jdwp_command(Vec<Method>, 2, 5)]
 #[derive(Debug, JdwpWritable)]
@@ -94,23 +105,30 @@ pub struct Method {
     pub signature: String,
     /// The modifier bit flags (also known as access flags) which provide
     /// additional information on the method declaration.
+    ///
     /// Individual flag values are defined in Chapter 4 of The Java™ Virtual
     /// Machine Specification.
+    ///
     /// In addition, The 0xf0000000 bit identifies the method as synthetic, if
     /// the synthetic attribute capability is available.
     pub mod_bits: i32,
 }
 
 /// Returns the current status of the reference type.
+///
 /// The status indicates the extent to which the reference type has been
 /// initialized, as described in section 2.1.6 of The Java™ Virtual Machine
 /// Specification.
+///
 /// If the class is linked the PREPARED and VERIFIED bits in the returned
 /// status bits will be set.
+///
 /// If the class is initialized the INITIALIZED bit in the returned status bits
 /// will be set.
+///
 /// If an error occurred during initialization then the ERROR bit in the
 /// returned status bits will be set.
+///
 /// The returned status bits are undefined for array types and for primitive
 /// classes (such as java.lang.Integer.TYPE).
 #[jdwp_command(ClassStatus, 2, 9)]
@@ -121,6 +139,7 @@ pub struct Status {
 }
 
 /// Returns the interfaces declared as implemented by this class.
+///
 /// Interfaces indirectly implemented (extended by the implemented interface or
 /// implemented by a superclass) are not included.
 #[jdwp_command(Vec<InterfaceID>, 2, 10)]
@@ -145,9 +164,11 @@ pub struct Instances {
     /// The reference type ID
     ref_type: ReferenceTypeID,
     /// Maximum number of instances to return.
+    ///
     /// Must be non-negative.
+    ///
     /// If zero, all instances are returned.
-    max_instances: i32,
+    max_instances: u32,
 }
 
 /// Returns the class object corresponding to this type.
@@ -169,8 +190,9 @@ pub struct ClassFileVersionReply {
 /// Return the raw bytes of the constant pool in the format of the
 /// constant_pool item of the Class File Format in The Java™ Virtual Machine
 /// Specification.
+///
 /// Since JDWP version 1.6. Requires canGetConstantPool capability - see
-/// [CapabilitiesNew].
+/// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command(2, 18)]
 #[derive(Debug, JdwpWritable)]
 pub struct ConstantPool {
@@ -181,6 +203,7 @@ pub struct ConstantPool {
 #[derive(Debug, JdwpReadable)]
 pub struct ConstantPoolReply {
     /// Total number of constant pool entries plus one.
+    ///
     /// This corresponds to the constant_pool_count item of the Class File
     /// Format in The Java™ Virtual Machine Specification.
     pub count: i32,
