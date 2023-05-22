@@ -507,7 +507,6 @@ fn constant_pool() -> Result {
         "Class(\"java/io/PrintStream\")",
         "Class(\"java/lang/Class\")",
         "Class(\"java/lang/Exception\")",
-        "Class(\"java/lang/InterruptedException\")",
         "Class(\"java/lang/Object\")",
         "Class(\"java/lang/Runnable\")",
         "Class(\"java/lang/System\")",
