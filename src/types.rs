@@ -11,14 +11,6 @@ use std::{
 use crate::enums::{ModifierKind, StepDepth, StepSize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
-// why no #[doc = concat!(..)] in stable :(
-macro_rules! docs {
-    ($str:expr, $($x:tt)*) => {
-        #[doc = $str]
-        $($x)*
-    };
-}
-
 /// Uniquely identifies an object in the target VM.
 ///
 /// A particular object will be identified by exactly one [ObjectID] in JDWP
@@ -41,11 +33,11 @@ pub struct ObjectID(u64);
 /// The [MethodID] must uniquely identify the method within its class/interface
 /// or any of its subclasses/subinterfaces/implementors.
 ///
-/// A [MethodID] is not necessarily unique on its own; it is always paired with a
-/// [ReferenceTypeID] to uniquely identify one method.
+/// A [MethodID] is not necessarily unique on its own; it is always paired with
+/// a [ReferenceTypeID] to uniquely identify one method.
 ///
-/// The [ReferenceTypeID] can identify either the declaring type of the method or
-/// a subtype.
+/// The [ReferenceTypeID] can identify either the declaring type of the method
+/// or a subtype.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct MethodID(u64);
 
@@ -87,14 +79,15 @@ macro_rules! ids {
     ($($id:ident: $tpe:ident),* $(,)?) => {
         $(
             impl $tpe {
-                docs! {
-                    concat!("Creates a new instance of [", stringify!($tpe), "] from an arbitrary number."),
-                    /// # Safety
-                    /// It is up to the caller to ensure that the id does indeed exist and is correct.
-                    /// You can 'safely' obtain it by [JdwpReadable::read], but that will be incorrect obviously.
-                    pub const unsafe fn new(raw: u64) -> Self {
-                        Self(raw)
-                    }
+                #[doc = "Creates a new instance of ["]
+                #[doc = stringify!($tpe)]
+                #[doc = "] from an arbitrary number."]
+                /// # Safety
+                /// It is up to the caller to ensure that the id does indeed exist and is correct.
+                ///
+                /// You can 'safely' obtain it by [JdwpReadable::read], but that will be incorrect obviously.
+                pub const unsafe fn new(raw: u64) -> Self {
+                    Self(raw)
                 }
             }
 
@@ -147,7 +140,8 @@ ids! {
 #[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
 pub struct ThreadID(ObjectID);
 
-/// Uniquely identifies an object in the target VM that is known to be a thread group.
+/// Uniquely identifies an object in the target VM that is known to be a thread
+/// group.
 #[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
 pub struct ThreadGroupID(ObjectID);
 
@@ -191,14 +185,17 @@ macro_rules! wrapper_ids {
     ($($deref:ident {$($tpe:ident),* $(,)?})*) => {
         $($(
             impl $tpe {
-                docs! {
-                    concat!("Creates a new instance of [", stringify!($tpe), "] from an arbitrary [", stringify!($deref), "]."),
-                    /// # Safety
-                    /// It is up to the caller to ensure that the id does indeed correspond to this type.
-                    /// You can 'safely' obtain it by [JdwpReadable::read], but that will be incorrect obviously.
-                    pub const unsafe fn new(id: $deref) -> Self {
-                        Self(id)
-                    }
+                #[doc = "Creates a new instance of ["]
+                #[doc = stringify!($tpe)]
+                #[doc = "] from an arbitrary ["]
+                #[doc = stringify!($deref)]
+                #[doc = "]."]
+                /// # Safety
+                /// It is up to the caller to ensure that the id does indeed correspond to this type.
+                ///
+                /// You can 'safely' obtain it by [JdwpReadable::read], but that will be incorrect obviously.
+                pub const unsafe fn new(id: $deref) -> Self {
+                    Self(id)
                 }
             }
 
@@ -359,7 +356,7 @@ tagged_io! {
     { Self::Void => Ok(()) }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TaggedObjectID {
     /// an array object
     Array(ArrayID),
@@ -409,21 +406,6 @@ impl Deref for TaggedObjectID {
             ThreadGroup(id) => id,
             ClassLoader(id) => id,
             ClassObject(id) => id,
-        }
-    }
-}
-
-impl Debug for TaggedObjectID {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use TaggedObjectID::*;
-        match self {
-            Array(id) => write!(f, "Array({})", id.0 .0),
-            Object(id) => write!(f, "Object({})", id.0),
-            String(id) => write!(f, "String({})", id.0 .0),
-            Thread(id) => write!(f, "Thread({})", id.0 .0),
-            ThreadGroup(id) => write!(f, "ThreadGroup({})", id.0 .0),
-            ClassLoader(id) => write!(f, "ClassLoader({})", id.0 .0),
-            ClassObject(id) => write!(f, "ClassObject({})", id.0 .0),
         }
     }
 }
@@ -503,13 +485,13 @@ tagged_io! {
     {}
 }
 
-/// A tagged representation of [ReferenceTypeID], similar to how [TaggedObjectID]
-/// is a representation of the [ObjectID].
+/// A tagged representation of [ReferenceTypeID], similar to how
+/// [TaggedObjectID] is a representation of the [ObjectID].
 ///
 /// This construct is not separated into a separate value type in JDWP spec and
 /// exists only here in Rust, in JDWP it's usually represented by a pair of
 /// [TypeTag] and [ReferenceTypeID] values.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TaggedReferenceTypeID {
     /// a class reference
     Class(ClassID),
@@ -547,17 +529,6 @@ impl Deref for TaggedReferenceTypeID {
     }
 }
 
-impl Debug for TaggedReferenceTypeID {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use TaggedReferenceTypeID::*;
-        match self {
-            Class(id) => write!(f, "Class({})", id.0 .0),
-            Interface(id) => write!(f, "Interface({})", id.0 .0),
-            Array(id) => write!(f, "Array({})", id.0 .0),
-        }
-    }
-}
-
 tagged_io! {
     TaggedReferenceTypeID <-> TypeTag,
     Class, Interface, Array
@@ -565,6 +536,7 @@ tagged_io! {
 }
 
 /// An executable location.
+///
 /// The location is identified by one byte type tag followed by a a class_id
 /// followed by a method_id followed by an unsigned eight-byte index, which
 /// identifies the location within the method. Index values are restricted as
@@ -621,16 +593,17 @@ macro_rules! optional_tag_impl {
 
 optional_tag_impl![Location, TaggedObjectID];
 
-/// An opaque type for the request id, which is represented in JDWP docs as just a raw
-/// integer and exists only here in Rust similar to all the other IDs.
+/// An opaque type for the request id, which is represented in JDWP docs as just
+/// a raw integer and exists only here in Rust similar to all the other IDs.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
 pub struct RequestID(i32);
 
 impl RequestID {
     /// Creates a new instance of [RequestID] from an arbitrary number.
     /// # Safety
-    /// It is up to the caller to ensure that the id does indeed exist and is correct.
-    /// You can 'safely' obtain it by [JdwpReadable::read], but that will be incorrect obviously.
+    /// It is up to the caller to ensure that the id does indeed exist and is
+    /// correct. You can 'safely' obtain it by [JdwpReadable::read], but
+    /// that will be incorrect obviously.
     pub const unsafe fn new(id: i32) -> Self {
         Self(id)
     }

@@ -20,7 +20,8 @@ use crate::{
 #[jdwp_command(RequestID, 15, 1)]
 #[derive(Debug, JdwpWritable)]
 pub struct Set {
-    /// Event kind to request. Some events may require a capability in order to be requested.
+    /// Event kind to request. Some events may require a capability in order to
+    /// be requested.
     event_kind: EventKind,
     /// What threads are suspended when this event occurs?
     ///

@@ -18,20 +18,23 @@ pub struct VersionReply {
     /// Text information on the VM version
     pub description: String,
     /// Major JDWP Version number
-    pub version_major: i32,
+    pub version_major: u32,
     /// Minor JDWP Version number
-    pub version_minor: i32,
+    pub version_minor: u32,
     /// Target VM JRE version, as in the java.version property
     pub vm_version: String,
     /// Target VM name, as in the java.vm.name property
     pub vm_name: String,
 }
 
-/// Returns reference types for all the classes loaded by the target VM which match the given signature.
+/// Returns reference types for all the classes loaded by the target VM which
+/// match the given signature.
 ///
-/// Multiple reference types will be returned if two or more class loaders have loaded a class of the same name.
+/// Multiple reference types will be returned if two or more class loaders have
+/// loaded a class of the same name.
 ///
-/// The search is confined to loaded classes only; no attempt is made to load a class of the given signature.
+/// The search is confined to loaded classes only; no attempt is made to load a
+/// class of the given signature.
 #[jdwp_command(Vec<UnnamedClass>, 1, 2)]
 #[derive(Debug, JdwpWritable)]
 pub struct ClassesBySignature {
@@ -104,7 +107,8 @@ pub struct Dispose;
 
 /// Returns the sizes of variably-sized data types in the target VM.
 ///
-/// The returned values indicate the number of bytes used by the identifiers in command and reply packets.
+/// The returned values indicate the number of bytes used by the identifiers in
+/// command and reply packets.
 #[jdwp_command(IDSizeInfo, 1, 7)]
 #[derive(Debug, JdwpWritable)]
 pub struct IDSizes;
@@ -213,7 +217,8 @@ pub struct ClassPaths;
 
 #[derive(Debug, JdwpReadable)]
 pub struct ClassPathsReply {
-    /// Base directory used to resolve relative paths in either of the following lists.
+    /// Base directory used to resolve relative paths in either of the following
+    /// lists.
     pub base_dir: String,
     /// Components of the classpath
     pub classpaths: Vec<String>,
@@ -329,7 +334,8 @@ pub struct CapabilitiesNewReply {
     pub can_request_vmdeath_event: bool,
     /// Can the VM set a default stratum?
     pub can_set_default_stratum: bool,
-    /// Can the VM return instances, counts of instances of classes and referring objects?
+    /// Can the VM return instances, counts of instances of classes and
+    /// referring objects?
     pub can_get_instance_info: bool,
     /// Can the VM request monitor events?
     pub can_request_monitor_events: bool,
@@ -433,7 +439,8 @@ pub struct GenericClass {
     pub type_id: TaggedReferenceTypeID,
     /// The JNI signature of the loaded reference type
     pub signature: String,
-    /// The generic signature of the loaded reference type or an empty string if there is none.
+    /// The generic signature of the loaded reference type or an empty string if
+    /// there is none.
     pub generic_signature: String,
     /// The current class status
     pub status: ClassStatus,

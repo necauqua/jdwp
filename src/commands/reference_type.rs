@@ -2,9 +2,10 @@ use super::jdwp_command;
 use crate::{
     codec::{JdwpReadable, JdwpWritable},
     enums::ClassStatus,
+    jvm::{FieldModifiers, MethodModifiers, TypeModifiers},
     types::{
         ClassLoaderID, ClassObjectID, FieldID, InterfaceID, MethodID, ReferenceTypeID,
-        TaggedObjectID,
+        TaggedObjectID, TaggedReferenceTypeID, Value,
     },
 };
 
@@ -42,7 +43,7 @@ pub struct ClassLoader {
 ///
 /// If the reference type is an array or a primitive class (for example,
 /// `java.lang.Integer.TYPE`), the value of the returned bit mask is undefined.
-#[jdwp_command(i32, 2, 3)]
+#[jdwp_command(TypeModifiers, 2, 3)]
 #[derive(Debug, JdwpWritable)]
 pub struct Modifiers {
     ref_type: ReferenceTypeID,
@@ -77,7 +78,7 @@ pub struct Field {
     ///
     /// In addition, the 0xf0000000 bit identifies the field as synthetic, if
     /// the synthetic attribute capability is available.
-    pub mod_bits: i32,
+    pub mod_bits: FieldModifiers,
 }
 
 /// Returns information for each method in a reference type.
@@ -85,8 +86,9 @@ pub struct Field {
 /// Inherited methods are not included.
 ///
 /// The list of methods will include constructors (identified with the name
-/// "&lt;init>"), the initialization method (identified with the name "&lt;clinit>")
-/// if present, and any synthetic methods created by the compiler.
+/// "&lt;init>"), the initialization method (identified with the name
+/// "&lt;clinit>") if present, and any synthetic methods created by the
+/// compiler.
 ///
 /// Methods are returned in the order they occur in the class file.
 #[jdwp_command(Vec<Method>, 2, 5)]
@@ -111,7 +113,38 @@ pub struct Method {
     ///
     /// In addition, The 0xf0000000 bit identifies the method as synthetic, if
     /// the synthetic attribute capability is available.
-    pub mod_bits: i32,
+    pub mod_bits: MethodModifiers,
+}
+
+/// Returns the value of one or more static fields of the reference type.
+///
+/// Each field must be member of the reference type or one of its superclasses,
+/// superinterfaces, or implemented interfaces.
+///
+/// Access control is not enforced; for example, the values of private fields
+/// can be obtained.
+#[jdwp_command(Vec<Value>, 2, 6)]
+#[derive(Debug, JdwpWritable)]
+pub struct GetValues {
+    pub ref_type: ReferenceTypeID,
+    pub fields: Vec<FieldID>,
+}
+
+/// Returns the source file name in which a reference type was declared.
+#[jdwp_command(String, 2, 7)]
+#[derive(Debug, JdwpWritable)]
+pub struct SourceFile {
+    /// The reference type ID
+    ref_type: ReferenceTypeID,
+}
+
+/// Returns the classes and interfaces directly nested within this type. Types
+/// further nested within those types are not included.
+#[jdwp_command(Vec<TaggedReferenceTypeID>, 2, 8)]
+#[derive(Debug, JdwpWritable)]
+pub struct NestedTypes {
+    /// The reference type ID
+    ref_type: ReferenceTypeID,
 }
 
 /// Returns the current status of the reference type.
@@ -157,8 +190,126 @@ pub struct ClassObject {
     ref_type: ReferenceTypeID,
 }
 
-/// Returns the class object corresponding to this type.
-#[jdwp_command(Vec<TaggedObjectID>, 2, 12)]
+/// Returns the value of the SourceDebugExtension attribute.
+///
+/// Since JDWP version 1.4. Requires canGetSourceDebugExtension capability -
+/// see [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
+#[jdwp_command(String, 2, 12)]
+#[derive(Debug, JdwpWritable)]
+pub struct SourceDebugExtension {
+    /// The reference type ID
+    ref_type: ReferenceTypeID,
+}
+
+/// Returns the JNI signature of a reference type along with the generic
+/// signature if there is one.
+///
+/// Generic signatures are described in the signature attribute section in
+/// The Java™ Virtual Machine Specification.
+///
+/// Since JDWP version 1.5.
+#[jdwp_command(2, 13)]
+#[derive(Debug, JdwpWritable)]
+pub struct SignatureWithGeneric {
+    /// The reference type ID
+    ref_type: ReferenceTypeID,
+}
+
+#[derive(Debug, JdwpReadable)]
+pub struct SignatureWithGenericReply {
+    /// The JNI signature for the reference type.
+    pub signature: String,
+    /// The generic signature for the reference type or an empty string if
+    /// there is none.
+    pub generic_signature: String,
+}
+
+/// Returns information, including the generic signature if any, for each field
+/// in a reference type.
+///
+/// Inherited fields are not included.
+///
+/// The field list will include any synthetic fields created by the compiler.
+///
+/// Fields are returned in the order they occur in the class file.
+///
+/// Generic signatures are described in the signature attribute section in
+/// The Java™ Virtual Machine Specification.
+///
+/// Since JDWP version 1.5.
+
+#[jdwp_command(Vec<FieldWithGeneric>, 2, 14)]
+#[derive(Debug, JdwpWritable)]
+pub struct FieldsWithGeneric {
+    /// The reference type ID
+    ref_type: ReferenceTypeID,
+}
+
+#[derive(Debug, JdwpReadable)]
+pub struct FieldWithGeneric {
+    /// The field ID
+    pub field_id: FieldID,
+    /// The name of the field
+    pub name: String,
+    /// The JNI signature of the field
+    pub signature: String,
+    /// The generic signature of the field, or an empty string if there is none
+    pub generic_signature: String,
+    /// The modifier bit flags (also known as access flags) which provide
+    /// additional information on the field declaration.
+    ///
+    /// Individual flag values are defined in Chapter 4 of The Java™ Virtual
+    /// Machine Specification.
+    ///
+    /// In addition, the 0xf0000000 bit identifies the field as synthetic, if
+    /// the synthetic attribute capability is available.
+    pub mod_bits: FieldModifiers,
+}
+
+/// Returns information, including the generic signature if any, for each method
+/// in a reference type. Inherited methodss are not included.
+/// The list of methods will include constructors (identified with the name
+/// "&lt;init>"), the initialization method (identified with the name
+/// "&lt;clinit>") if present, and any synthetic methods created by the
+/// compiler. Methods are returned in the order they occur in the class file.
+///
+/// Generic signatures are described in the signature attribute section in
+/// The Java™ Virtual Machine Specification.
+///
+/// Since JDWP version 1.5.
+#[jdwp_command(Vec<MethodWithGeneric>, 2, 15)]
+#[derive(Debug, JdwpWritable)]
+pub struct MethodsWithGeneric {
+    /// The reference type ID
+    ref_type: ReferenceTypeID,
+}
+
+#[derive(Debug, JdwpReadable)]
+pub struct MethodWithGeneric {
+    /// The method ID
+    pub method_id: MethodID,
+    /// The name of the method
+    pub name: String,
+    /// The JNI signature of the method
+    pub signature: String,
+    /// The generic signature of the method, or an empty string if there is none
+    pub generic_signature: String,
+    /// The modifier bit flags (also known as access flags) which provide
+    /// additional information on the method declaration.
+    ///
+    /// Individual flag values are defined in Chapter 4 of The Java™ Virtual
+    /// Machine Specification.
+    ///
+    /// In addition, the 0xf0000000 bit identifies the method as synthetic, if
+    /// the synthetic attribute capability is available.
+    pub mod_bits: MethodModifiers,
+}
+
+/// Returns instances of this reference type.
+///
+/// Only instances that are reachable for the purposes of garbage collection are
+/// returned.
+#[jdwp_command(Vec<TaggedObjectID>, 2, 16)]
 #[derive(Debug, JdwpWritable)]
 pub struct Instances {
     /// The reference type ID
@@ -206,7 +357,7 @@ pub struct ConstantPoolReply {
     ///
     /// This corresponds to the constant_pool_count item of the Class File
     /// Format in The Java™ Virtual Machine Specification.
-    pub count: i32,
+    pub count: u32,
     /// Raw bytes of constant pool
     pub cpbytes: Vec<u8>,
 }
