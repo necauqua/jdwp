@@ -38,7 +38,12 @@ impl Drop for JvmHandle {
         match self.jvm_process.kill() {
             Ok(_) => {}
             Err(e) if e.kind() == ErrorKind::InvalidInput => {} // already dead
+            #[cfg(unix)]
             r => r.expect("Failed to kill the JVM"),
+            #[cfg(not(unix))]
+            Err(e) => log::error!("Failed to kill the JVM: {:?}", e),
+            // ^ windows gives a PermissionDenied on CI instead of
+            // InvalidInput if the process is already dead
         }
 
         let status = self
