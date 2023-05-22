@@ -1,6 +1,6 @@
 use crate::{
     codec::JdwpWritable,
-    types::{ArrayID, ArrayRegion, Untagged},
+    types::{ArrayID, ArrayRegion, UntaggedValue},
 };
 
 use super::jdwp_command;
@@ -45,5 +45,5 @@ pub struct SetValues {
     /// The first index to set
     first_index: i32,
     /// Values to set
-    values: Vec<Untagged>,
+    values: Vec<UntaggedValue>,
 }

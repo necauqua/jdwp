@@ -242,11 +242,12 @@ readable_enum! {
 }
 
 bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub struct InvokeOptions: u32 {
-        /// otherwise, normal virtual invoke (instance methods only)
-        const VERIFIED = 1;
         /// otherwise, all threads started
-        const PREPARED = 2;
+        const SINGLE_THREADED = 0x01;
+        /// otherwise, normal virtual invoke (instance methods only)
+        const NONVIRTUAL = 0x02;
     }
 }
 

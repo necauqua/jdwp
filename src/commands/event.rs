@@ -450,7 +450,7 @@ event_io! {
 }
 
 #[jdwp_command((), 64, 100)]
-#[derive(Debug, JdwpWritable, JdwpReadable)]
+#[derive(Debug, JdwpReadable)]
 pub struct Composite {
     pub suspend_policy: SuspendPolicy,
     pub events: Vec<Event>,

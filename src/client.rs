@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Debug,
     io::{self, Cursor, Read, Write},
     net::{Shutdown, TcpStream, ToSocketAddrs},
     sync::{
@@ -96,7 +97,11 @@ impl JdwpClient {
         &self.host_events_rx
     }
 
-    pub fn send<C: Command>(&mut self, command: C) -> Result<C::Output, ClientError> {
+    pub fn send<C>(&mut self, command: C) -> Result<C::Output, ClientError>
+    where
+        C: Command + JdwpWritable + Debug,
+        C::Output: JdwpReadable + Debug,
+    {
         match self.reader_handle {
             Some(ref handle) if handle.is_finished() => {
                 return Err(self.reader_handle.take().unwrap().join().unwrap())

@@ -294,9 +294,9 @@ impl Value {
 /// Used in places where JDWP specifies an `untagged-value` type and expects
 /// no tag since it should be derived from context.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Untagged(Value);
+pub struct UntaggedValue(Value);
 
-impl Deref for Untagged {
+impl Deref for UntaggedValue {
     type Target = Value;
 
     fn deref(&self) -> &Self::Target {
@@ -304,7 +304,7 @@ impl Deref for Untagged {
     }
 }
 
-impl JdwpWritable for Untagged {
+impl JdwpWritable for UntaggedValue {
     fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
         match self.0 {
             Value::Void => Ok(()),
@@ -565,7 +565,7 @@ pub struct Location {
     index: u64,
 }
 
-macro_rules! optional_tag_impl {
+macro_rules! optional_impl {
     ($($tpe:ident),* $(,)?) => {
         $(
             impl JdwpReadable for Option<$tpe> {
@@ -591,7 +591,7 @@ macro_rules! optional_tag_impl {
     };
 }
 
-optional_tag_impl![Location, TaggedObjectID];
+optional_impl![Value, TaggedObjectID, Location];
 
 /// An opaque type for the request id, which is represented in JDWP docs as just
 /// a raw integer and exists only here in Rust similar to all the other IDs.

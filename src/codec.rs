@@ -214,3 +214,16 @@ impl<T: JdwpWritable> JdwpWritable for Vec<T> {
         Ok(())
     }
 }
+
+impl<A: JdwpReadable, B: JdwpReadable> JdwpReadable for (A, B) {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        Ok((A::read(read)?, B::read(read)?))
+    }
+}
+
+impl<A: JdwpWritable, B: JdwpWritable> JdwpWritable for (A, B) {
+    fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
+        self.0.write(write)?;
+        self.1.write(write)
+    }
+}

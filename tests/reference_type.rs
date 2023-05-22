@@ -1,7 +1,8 @@
-use std::{assert_eq, io::Cursor};
+use std::{assert_eq, fmt::Debug, io::Cursor};
 
 use jdwp::{
     client::JdwpClient,
+    codec::{JdwpReadable, JdwpWritable},
     commands::{
         class_object_reference::ReflectedType,
         reference_type::{
@@ -25,14 +26,18 @@ const ARRAY_CLS: &str = "[I";
 
 const CASES: &[&str] = &[OUR_CLS, "Ljava/lang/String;", "Ljava/util/List;", ARRAY_CLS];
 
-fn get_responses<C: Command>(
+fn get_responses<C>(
     client: &mut JdwpClient,
     signatures: &[&str],
     new: fn(ReferenceTypeID) -> C,
-) -> Result<Vec<C::Output>> {
+) -> Result<Vec<C::Output>>
+where
+    C: Command + JdwpWritable + Debug,
+    C::Output: JdwpReadable + Debug,
+{
     signatures.try_map(|item| {
-        let type_id = client.send(ClassesBySignature::new(*item))?[0].type_id;
-        client.send(new(*type_id))
+        let id = client.send(ClassesBySignature::new(*item))?[0].type_id;
+        client.send(new(*id))
     })
 }
 
@@ -293,8 +298,8 @@ fn source_file() -> Result {
     ]
     "###);
 
-    let type_id = client.send(ClassesBySignature::new(ARRAY_CLS))?[0].type_id;
-    let array_source_file = client.send(SourceFile::new(*type_id));
+    let id = client.send(ClassesBySignature::new(ARRAY_CLS))?[0].type_id;
+    let array_source_file = client.send(SourceFile::new(*id));
 
     assert_snapshot!(array_source_file, @r###"
     Err(
@@ -473,7 +478,7 @@ fn constant_pool() -> Result {
 
     let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
     let constant_pool = client.send(ConstantPool::new(*id))?;
-    let mut reader = Cursor::new(constant_pool.cpbytes);
+    let mut reader = Cursor::new(constant_pool.bytes);
 
     // pfew lol why did I bother so much
     let items = ConstantPoolItem::read_all(constant_pool.count, &mut reader)?;

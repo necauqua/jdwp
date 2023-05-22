@@ -118,15 +118,15 @@ pub struct IDSizes;
 #[derive(Debug, Clone, JdwpReadable)]
 pub struct IDSizeInfo {
     /// field_id size in bytes
-    pub field_id_size: i32,
+    pub field_id_size: u32,
     /// method_id size in bytes
-    pub method_id_size: i32,
+    pub method_id_size: u32,
     /// object_id size in bytes
-    pub object_id_size: i32,
+    pub object_id_size: u32,
     /// reference_type_id size in bytes
-    pub reference_type_id_size: i32,
+    pub reference_type_id_size: u32,
     /// frame_id size in bytes
-    pub frame_id_size: i32,
+    pub frame_id_size: u32,
 }
 
 /// Suspends the execution of the application running in the target VM.
@@ -228,18 +228,6 @@ pub struct ClassPathsReply {
     pub bootclasspaths: Vec<String>,
 }
 
-#[derive(Debug, JdwpWritable)]
-pub struct ObjectRef {
-    object: ObjectID,
-    ref_cnt: i32,
-}
-
-impl ObjectRef {
-    pub fn new(object: ObjectID, ref_cnt: i32) -> Self {
-        Self { object, ref_cnt }
-    }
-}
-
 /// Releases a list of object IDs.
 ///
 /// For each object in the list, the following applies.
@@ -273,7 +261,7 @@ impl ObjectRef {
 #[jdwp_command((), 1, 14)]
 #[derive(Debug, JdwpWritable)]
 pub struct DisposeObjects {
-    requests: Vec<ObjectRef>,
+    requests: Vec<(ObjectID, u32)>,
 }
 
 /// Tells the target VM to stop sending events. Events are not discarded; they
@@ -411,20 +399,6 @@ impl Debug for CapabilitiesNewReply {
     }
 }
 
-#[derive(Debug, JdwpWritable)]
-pub struct RedefiningClass {
-    /// The reference type.
-    ref_type: ReferenceTypeID,
-    /// Bytes defining class in JVM class file format.
-    bytes: Vec<u8>,
-}
-
-impl RedefiningClass {
-    pub fn new(ref_type: ReferenceTypeID, bytes: Vec<u8>) -> Self {
-        Self { ref_type, bytes }
-    }
-}
-
 /// Installs new class definitions.
 ///
 /// If there are active stack frames in methods of the redefined classes in the
@@ -448,7 +422,7 @@ impl RedefiningClass {
 #[jdwp_command((), 1, 18)]
 #[derive(Debug, JdwpWritable)]
 pub struct RedefineClasses {
-    classes: Vec<RedefiningClass>,
+    classes: Vec<(ReferenceTypeID, Vec<u8>)>,
 }
 
 /// Set the default stratum. Requires `can_set_default_stratum` capability -

@@ -335,9 +335,9 @@ pub struct ClassFileVersion {
 #[derive(Debug, JdwpReadable)]
 pub struct ClassFileVersionReply {
     /// Major version number
-    pub major_version: i32,
+    pub major_version: u32,
     /// Minor version number
-    pub minor_version: i32,
+    pub minor_version: u32,
 }
 
 /// Return the raw bytes of the constant pool in the format of the
@@ -361,14 +361,14 @@ pub struct ConstantPoolReply {
     /// Format in The Java™ Virtual Machine Specification.
     pub count: u32,
     /// Raw bytes of constant pool
-    pub cpbytes: Vec<u8>,
+    pub bytes: Vec<u8>,
 }
 
 // special debug so that trace logs dont take a quadrillion lines
 impl Debug for ConstantPoolReply {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let hex_bytes = self
-            .cpbytes
+            .bytes
             .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<String>();
@@ -383,7 +383,7 @@ impl Debug for ConstantPoolReply {
 
         f.debug_struct("ConstantPoolReply")
             .field("count", &self.count)
-            .field("cpbytes", &Unquoted(hex_bytes))
+            .field("bytes", &Unquoted(hex_bytes))
             .finish()
     }
 }

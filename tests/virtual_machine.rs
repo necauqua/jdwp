@@ -1,3 +1,5 @@
+use std::assert_eq;
+
 use jdwp::{
     client::ClientError,
     commands::{string_reference::Value, thread_reference, virtual_machine::*},
@@ -360,17 +362,12 @@ fn set_default_stratum() -> Result {
 fn instance_counts() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let type_id = client.send(ClassesBySignature::new("LBasic;"))?[0].type_id;
-    let type_id_2 = client.send(ClassesBySignature::new("LBasic$NestedClass;"))?[0].type_id;
+    let id = client.send(ClassesBySignature::new("LBasic;"))?[0].type_id;
+    let id2 = client.send(ClassesBySignature::new("LBasic$NestedClass;"))?[0].type_id;
 
-    let counts = client.send(InstanceCounts::new(vec![*type_id, *type_id_2]))?;
+    let counts = client.send(InstanceCounts::new(vec![*id, *id2]))?;
 
-    assert_snapshot!(counts, @r###"
-    [
-        2,
-        0,
-    ]
-    "###);
+    assert_eq!(counts, [2, 0]);
 
     Ok(())
 }
