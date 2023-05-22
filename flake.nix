@@ -29,7 +29,10 @@
             (rust-bin.selectLatestNightlyWith (toolchain: toolchain.rustfmt))
             rust-analyzer
             cargo-nextest
+            cargo-insta
           ];
+
+          INSTA_TEST_RUNNER = "nextest";
         };
       }
     );

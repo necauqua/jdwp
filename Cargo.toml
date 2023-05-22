@@ -11,14 +11,16 @@ rust-version = '1.66.1'
 
 [dependencies]
 jdwp-macros = { path = 'jdwp-macros' }
+paste = '1.0'
 
 log = '0.4'
 byteorder = '1.4'
 bitflags = '2.3'
 thiserror = '1.0'
-paste = '1.0'
-slab = '0.4'
+cesu8 = '1.1'
 
 [dev-dependencies]
 env_logger = '0.10'
 named-lock = '0.3'
+insta = { version = '1.29', features = ['filters'] }
+lazy_static = '1.4'

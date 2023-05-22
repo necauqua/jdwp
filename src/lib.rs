@@ -18,7 +18,10 @@ pub mod client;
 pub mod codec;
 pub mod commands;
 pub mod enums;
+pub mod jvm;
 pub mod types;
+
+mod xorshift;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, JdwpReadable, JdwpWritable)]
 pub struct CommandId {

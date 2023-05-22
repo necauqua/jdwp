@@ -1,14 +1,19 @@
 {
     "rust-analyzer.server.path": "rust-analyzer",
     "rust-analyzer.rustfmt.overrideCommand": [
-        "rustfmt", "--config imports_granularity=Crate", "--edition", "2021"
+        "rustfmt", "--edition", "2021", "--"
     ],
     "rust-analyzer.rustfmt.rangeFormatting.enable": true,
     "[rust]": {
         "editor.defaultFormatter": "rust-lang.rust-analyzer",
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
     },
     "coverage-gutters.coverageFileNames": [
-        "target/lcov.info"
+        "target/lcov.info",
     ],
+    "files.exclude": {
+        "**/*.pending-snap": true,
+        "**/Cargo.lock": true,
+        "**/flake.lock": true,
+    }
 }

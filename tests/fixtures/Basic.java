@@ -1,14 +1,33 @@
-public final class Basic {
+import java.util.HashMap;
+
+class Basic implements Runnable {
+
+    static int staticInt = 42;
+    public static Basic secondInstance = new Basic();
 
     public long ticks = 0;
+
+    final String unused = "hello";
 
     public void tick() {
         ++ticks;
     }
 
-    public void start() {
-        // write a few bytes to stdout once we're running
-        System.out.println("up");
+    @Override
+    public void run() {
+        try {
+            // make sure nested is absolutely totally surely loaded
+            Class.forName("Basic$NestedClass");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
+        // load the inner classes
+        ping(getClass().getClasses());
+        ping(HashMap.class.getClasses());
+
+        System.out.println("up"); // tell the test we're ready
+
         while (true) {
             tick();
             try {
@@ -20,6 +39,19 @@ public final class Basic {
     }
 
     public static void main(String[] args) throws Exception {
-        new Basic().start();
+        new Basic().run();
+    }
+
+    private static void ping(Object ignored) {
+        // noop lol
+    }
+
+    class NestedClass {
+        float field;
+    }
+
+    interface NestedInterface {
+
+        void call();
     }
 }

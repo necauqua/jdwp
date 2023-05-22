@@ -23,7 +23,8 @@ use super::jdwp_command;
 /// requested.
 #[derive(Debug, JdwpReadable, JdwpWritable)]
 pub struct VmStart {
-    /// Request that generated event (or 0 if this event is automatically generated)
+    /// Request that generated event (or 0 if this event is automatically
+    /// generated)
     pub request_id: i32,
     /// Initial thread
     pub thread_id: ThreadID,
@@ -210,7 +211,8 @@ pub struct Exception {
     pub request_id: i32,
     /// Thread with exception
     pub thread: ThreadID,
-    /// Location of exception throw (or first non-native location after throw if thrown from a native method)
+    /// Location of exception throw (or first non-native location after throw if
+    /// thrown from a native method)
     pub location: Location,
     /// Thrown exception
     pub exception: TaggedObjectID,
@@ -351,7 +353,8 @@ pub struct ClassUnload {
 ///
 /// Field modifications are not considered field accesses.
 ///
-/// Requires `can_watch_field_access` capability - see [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
+/// Requires `can_watch_field_access` capability - see
+/// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[derive(Debug, JdwpReadable, JdwpWritable)]
 pub struct FieldAccess {
     /// Request that generated event

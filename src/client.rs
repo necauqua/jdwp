@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io::{self, Cursor, Read, Write},
     net::{Shutdown, TcpStream, ToSocketAddrs},
     sync::{
@@ -8,7 +9,6 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use slab::Slab;
 use thiserror::Error;
 
 use crate::{
@@ -18,16 +18,18 @@ use crate::{
         virtual_machine::{Dispose, IDSizeInfo},
         Command,
     },
+    xorshift::XorShift32,
     ErrorCode, PacketHeader, PacketMeta,
 };
 
-type WaitingMap = Arc<Mutex<Slab<Sender<Result<Vec<u8>, ClientError>>>>>;
+type WaitingMap = Arc<Mutex<HashMap<u32, Sender<Result<Vec<u8>, ClientError>>>>>;
 
 #[derive(Debug)]
 pub struct JdwpClient {
     writer: JdwpWriter<TcpStream>,
     host_events_rx: Receiver<Composite>,
     waiting: WaitingMap,
+    next_id: XorShift32,
     reader_handle: Option<JoinHandle<ClientError>>,
 }
 
@@ -58,7 +60,7 @@ impl JdwpClient {
             return Err(ClientError::FailedHandshake);
         }
 
-        let waiting = Arc::new(Mutex::new(Slab::new()));
+        let waiting = Arc::new(Mutex::new(HashMap::new()));
         let (host_events_tx, host_events_rx) = mpsc::channel();
 
         // todo: hardcode fetching it here I guess
@@ -85,6 +87,7 @@ impl JdwpClient {
             writer: JdwpWriter::new(stream, id_sizes),
             host_events_rx,
             waiting,
+            next_id: XorShift32::new(0xDEAD),
             reader_handle: Some(reader_handle),
         })
     }
@@ -102,13 +105,14 @@ impl JdwpClient {
             _ => {}
         }
 
-        let (sender, receiver) = mpsc::channel();
+        let (waiting_tx, waiting_rx) = mpsc::channel();
+
+        let id = self.next_id.next();
 
         // see comment below
-        let id = match C::ID {
-            Dispose::ID => 0,
-            _ => self.waiting.lock().unwrap().insert(sender) as u32,
-        };
+        if C::ID != Dispose::ID {
+            self.waiting.lock().unwrap().insert(id, waiting_tx);
+        }
 
         let mut data = Vec::new();
         command.write(&mut JdwpWriter::new(
@@ -125,7 +129,7 @@ impl JdwpClient {
         header.write(&mut self.writer)?;
         self.writer.write_all(&data)?;
 
-        log::trace!("[{:x}] sent {} command: {:?}", header.id, C::ID, command);
+        log::trace!("[{:x}] sent command {}: {:?}", header.id, C::ID, command);
 
         // special handling for the dispose command because
         // we don't always get the response header for it
@@ -140,13 +144,14 @@ impl JdwpClient {
 
             // SAFETY: we know that C is () here, but the type system does not, eh
             // technically it's a noop, we just cheat the types
-            // can do this in safe Rust with trait specialization whenever that's in the language
+            // can do this in safe Rust with trait specialization whenever that's in the
+            // language
 
             // todo: now years later I'm not too sure about this?.. it's fishy
             return Ok(unsafe { std::mem::transmute_copy(&()) });
         }
 
-        let data = receiver
+        let data = waiting_rx
             .recv()
             .expect("Sender hung up, this cannot happen")?;
 
@@ -201,13 +206,17 @@ fn read_packet(
             );
             return Ok(());
         }
-        PacketMeta::Reply(ErrorCode::None) => Ok(data),
-        PacketMeta::Reply(error_code) => Err(ClientError::HostError(error_code)),
+        PacketMeta::Reply(ErrorCode::None) => {
+            log::trace!("[{:x}] reply, len {}", header.id, data.len());
+            Ok(data)
+        }
+        PacketMeta::Reply(error_code) => {
+            log::trace!("[{:x}] reply, host error: {:?}", header.id, error_code);
+            Err(ClientError::HostError(error_code))
+        }
     };
 
-    log::trace!("[{:x}] reply, len {}", header.id, header.length);
-
-    match waiting.lock().unwrap().try_remove(header.id as usize) {
+    match waiting.lock().unwrap().remove(&header.id) {
         Some(waiter) => waiter.send(to_send).unwrap(), // one-shot channel send
         None => log::warn!(
             "Received an unexpected packet from the JVM, ignoring: {:?}",
