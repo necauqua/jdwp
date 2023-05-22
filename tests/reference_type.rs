@@ -492,6 +492,8 @@ fn constant_pool() -> Result {
         .filter_map(|v| match v {
             // NestMembers were introduced in java 11
             ConstantPoolValue::Utf8(s) if s.as_ref() == "NestMembers" => None,
+            // for some reason java 8 has two of these - so we just ignore those lol
+            ConstantPoolValue::Class(s) if s.as_ref() == "java/lang/InterruptedException" => None,
             _ => Some(format!("{:?}", v)),
         })
         .collect::<Vec<_>>();
