@@ -15,6 +15,13 @@ class Basic implements Runnable {
 
     @Override
     public void run() {
+        try {
+            // make sure nested is absolutely totally surely loaded
+            Class.forName("Basic$NestedClass");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
         // load the inner classes
         ping(getClass().getClasses());
         ping(HashMap.class.getClasses());

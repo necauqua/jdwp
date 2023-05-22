@@ -17,6 +17,7 @@ pub mod object_reference;
 pub mod reference_type;
 pub mod string_reference;
 pub mod thread_group_reference;
+pub mod thread_reference;
 pub mod virtual_machine;
 
 pub mod field {

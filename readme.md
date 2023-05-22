@@ -93,8 +93,8 @@ MSRV is 1.66.1
   - [x] Value (1)
 
 - [ ] ThreadReference Command Set (11)
-  - [ ] Name (1)
-  - [ ] Suspend (2)
+  - [x] Name (1)
+  - [x] Suspend (2)
   - [ ] Resume (3)
   - [ ] Status (4)
   - [ ] ThreadGroup (5)

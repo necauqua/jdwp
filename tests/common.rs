@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     format,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, ErrorKind},
     net::TcpListener,
     ops::{Deref, DerefMut},
     process::{Child, Command, Stdio},
@@ -15,7 +15,7 @@ pub type Result<T = ()> = std::result::Result<T, Box<dyn Error>>;
 #[derive(Debug)]
 pub struct JvmHandle {
     jdwp_client: JdwpClient,
-    jvm_process: Child,
+    pub jvm_process: Child,
     port: u16,
 }
 
@@ -35,12 +35,23 @@ impl DerefMut for JvmHandle {
 
 impl Drop for JvmHandle {
     fn drop(&mut self) {
-        self.jvm_process.kill().expect("Failed to kill the JVM");
-        self.jvm_process
+        match self.jvm_process.kill() {
+            Ok(_) => {}
+            Err(e) if e.kind() == ErrorKind::InvalidInput => {} // already dead
+            r => r.expect("Failed to kill the JVM"),
+        }
+
+        let status = self
+            .jvm_process
             .wait()
             .expect("Failed to wait for JVM to die");
-        // just in case
-        log::info!("killed a JVM with JDWP port: {}", self.port);
+        // ^ just in case
+
+        log::info!(
+            "JVM with JDWP port {} finished, exit status: {}",
+            self.port,
+            status.code().unwrap_or_default()
+        );
     }
 }
 
@@ -168,4 +179,27 @@ macro_rules! assert_snapshot {
             insta::assert_debug_snapshot!($e, @$lit);
         });
     };
+}
+
+pub trait TryMapExt<T> {
+    fn try_map<E, F, U, M>(self, f: F) -> std::result::Result<Vec<U>, E>
+    where
+        F: FnMut(T) -> std::result::Result<U, M>,
+        E: From<M>;
+}
+
+impl<T, I> TryMapExt<T> for I
+where
+    I: IntoIterator<Item = T>,
+{
+    fn try_map<E, F, U, M>(self, mut f: F) -> std::result::Result<Vec<U>, E>
+    where
+        F: FnMut(T) -> std::result::Result<U, M>,
+        E: From<M>,
+    {
+        self.into_iter().try_fold(Vec::new(), move |mut acc, item| {
+            acc.push(f(item)?);
+            Ok(acc)
+        })
+    }
 }

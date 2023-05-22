@@ -18,7 +18,7 @@ use jdwp::{
 #[macro_use]
 mod common;
 
-use common::Result;
+use common::{Result, TryMapExt};
 
 const OUR_CLS: &str = "LBasic;";
 const ARRAY_CLS: &str = "[I";
@@ -30,13 +30,10 @@ fn get_responses<C: Command>(
     signatures: &[&str],
     new: fn(ReferenceTypeID) -> C,
 ) -> Result<Vec<C::Output>> {
-    signatures
-        .iter()
-        .try_fold(Vec::new(), move |mut acc, item| {
-            let type_id = client.send(ClassesBySignature::new(*item))?[0].type_id;
-            acc.push(client.send(new(*type_id))?);
-            Ok(acc)
-        })
+    signatures.try_map(|item| {
+        let type_id = client.send(ClassesBySignature::new(*item))?[0].type_id;
+        client.send(new(*type_id))
+    })
 }
 
 trait GetSignature {
@@ -61,12 +58,7 @@ where
     S: GetSignature,
     I: IntoIterator<Item = S>,
 {
-    let sigs: Result<_> = iterable
-        .into_iter()
-        .try_fold(Vec::new(), |mut acc, ref_id| {
-            acc.push(ref_id.get_signature(client)?);
-            Ok(acc)
-        });
+    let sigs: Result<_> = iterable.try_map(|ref_id| ref_id.get_signature(client));
     let mut sigs = sigs?;
     sigs.sort_unstable();
     Ok(sigs)
@@ -492,8 +484,16 @@ fn constant_pool() -> Result {
         .filter_map(|v| match v {
             // NestMembers were introduced in java 11
             ConstantPoolValue::Utf8(s) if s.as_ref() == "NestMembers" => None,
-            // for some reason java 8 has two of these - so we just ignore those lol
-            ConstantPoolValue::Class(s) if s.as_ref() == "java/lang/InterruptedException" => None,
+            // for some reason java 8 doubles these - so we just ignore those lol, this is ugly
+            ConstantPoolValue::Class(s)
+                if [
+                    "java/lang/InterruptedException",
+                    "java/lang/ClassNotFoundException",
+                ]
+                .contains(&s.as_ref()) =>
+            {
+                None
+            }
             _ => Some(format!("{:?}", v)),
         })
         .collect::<Vec<_>>();
@@ -509,6 +509,7 @@ fn constant_pool() -> Result {
         "Class(\"java/lang/Exception\")",
         "Class(\"java/lang/Object\")",
         "Class(\"java/lang/Runnable\")",
+        "Class(\"java/lang/RuntimeException\")",
         "Class(\"java/lang/System\")",
         "Class(\"java/lang/Thread\")",
         "Class(\"java/util/HashMap\")",
@@ -523,11 +524,15 @@ fn constant_pool() -> Result {
         "Methodref(Ref { class: \"Basic\", name: \"run\", descriptor: \"()V\" })",
         "Methodref(Ref { class: \"Basic\", name: \"tick\", descriptor: \"()V\" })",
         "Methodref(Ref { class: \"java/io/PrintStream\", name: \"println\", descriptor: \"(Ljava/lang/String;)V\" })",
+        "Methodref(Ref { class: \"java/lang/Class\", name: \"forName\", descriptor: \"(Ljava/lang/String;)Ljava/lang/Class;\" })",
         "Methodref(Ref { class: \"java/lang/Class\", name: \"getClasses\", descriptor: \"()[Ljava/lang/Class;\" })",
         "Methodref(Ref { class: \"java/lang/Object\", name: \"<init>\", descriptor: \"()V\" })",
         "Methodref(Ref { class: \"java/lang/Object\", name: \"getClass\", descriptor: \"()Ljava/lang/Class;\" })",
+        "Methodref(Ref { class: \"java/lang/RuntimeException\", name: \"<init>\", descriptor: \"(Ljava/lang/Throwable;)V\" })",
         "Methodref(Ref { class: \"java/lang/Thread\", name: \"sleep\", descriptor: \"(J)V\" })",
         "NameAndType(NameAndType { name: \"<init>\", descriptor: \"()V\" })",
+        "NameAndType(NameAndType { name: \"<init>\", descriptor: \"(Ljava/lang/Throwable;)V\" })",
+        "NameAndType(NameAndType { name: \"forName\", descriptor: \"(Ljava/lang/String;)Ljava/lang/Class;\" })",
         "NameAndType(NameAndType { name: \"getClass\", descriptor: \"()Ljava/lang/Class;\" })",
         "NameAndType(NameAndType { name: \"getClasses\", descriptor: \"()[Ljava/lang/Class;\" })",
         "NameAndType(NameAndType { name: \"out\", descriptor: \"Ljava/io/PrintStream;\" })",
@@ -540,6 +545,7 @@ fn constant_pool() -> Result {
         "NameAndType(NameAndType { name: \"tick\", descriptor: \"()V\" })",
         "NameAndType(NameAndType { name: \"ticks\", descriptor: \"J\" })",
         "NameAndType(NameAndType { name: \"unused\", descriptor: \"Ljava/lang/String;\" })",
+        "String(\"Basic$NestedClass\")",
         "String(\"hello\")",
         "String(\"up\")",
         "Utf8(\"()Ljava/lang/Class;\")",
@@ -547,7 +553,9 @@ fn constant_pool() -> Result {
         "Utf8(\"()[Ljava/lang/Class;\")",
         "Utf8(\"(J)V\")",
         "Utf8(\"(Ljava/lang/Object;)V\")",
+        "Utf8(\"(Ljava/lang/String;)Ljava/lang/Class;\")",
         "Utf8(\"(Ljava/lang/String;)V\")",
+        "Utf8(\"(Ljava/lang/Throwable;)V\")",
         "Utf8(\"([Ljava/lang/String;)V\")",
         "Utf8(\"<clinit>\")",
         "Utf8(\"<init>\")",
@@ -569,15 +577,18 @@ fn constant_pool() -> Result {
         "Utf8(\"NestedInterface\")",
         "Utf8(\"SourceFile\")",
         "Utf8(\"StackMapTable\")",
+        "Utf8(\"forName\")",
         "Utf8(\"getClass\")",
         "Utf8(\"getClasses\")",
         "Utf8(\"hello\")",
         "Utf8(\"java/io/PrintStream\")",
         "Utf8(\"java/lang/Class\")",
+        "Utf8(\"java/lang/ClassNotFoundException\")",
         "Utf8(\"java/lang/Exception\")",
         "Utf8(\"java/lang/InterruptedException\")",
         "Utf8(\"java/lang/Object\")",
         "Utf8(\"java/lang/Runnable\")",
+        "Utf8(\"java/lang/RuntimeException\")",
         "Utf8(\"java/lang/System\")",
         "Utf8(\"java/lang/Thread\")",
         "Utf8(\"java/util/HashMap\")",
