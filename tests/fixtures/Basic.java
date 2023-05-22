@@ -1,3 +1,5 @@
+import java.util.HashMap;
+
 class Basic implements Runnable {
 
     static int staticInt = 42;
@@ -14,8 +16,8 @@ class Basic implements Runnable {
     @Override
     public void run() {
         // load the inner classes
-        load(NestedClass.class);
-        load(NestedInterface.class);
+        ping(getClass().getClasses());
+        ping(HashMap.class.getClasses());
 
         System.out.println("up"); // tell the test we're ready
 
@@ -33,7 +35,7 @@ class Basic implements Runnable {
         new Basic().run();
     }
 
-    private static void load(Class<?> ignored) {
+    private static void ping(Object ignored) {
         // noop lol
     }
 

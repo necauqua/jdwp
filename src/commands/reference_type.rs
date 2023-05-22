@@ -1,3 +1,5 @@
+use std::fmt::{self, Debug};
+
 use super::jdwp_command;
 use crate::{
     codec::{JdwpReadable, JdwpWritable},
@@ -351,7 +353,7 @@ pub struct ConstantPool {
     ref_type: ReferenceTypeID,
 }
 
-#[derive(Debug, JdwpReadable)]
+#[derive(JdwpReadable)]
 pub struct ConstantPoolReply {
     /// Total number of constant pool entries plus one.
     ///
@@ -360,4 +362,28 @@ pub struct ConstantPoolReply {
     pub count: u32,
     /// Raw bytes of constant pool
     pub cpbytes: Vec<u8>,
+}
+
+// special debug so that trace logs dont take a quadrillion lines
+impl Debug for ConstantPoolReply {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let hex_bytes = self
+            .cpbytes
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
+
+        struct Unquoted(String);
+
+        impl Debug for Unquoted {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        f.debug_struct("ConstantPoolReply")
+            .field("count", &self.count)
+            .field("cpbytes", &Unquoted(hex_bytes))
+            .finish()
+    }
 }

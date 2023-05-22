@@ -213,18 +213,18 @@ fn methods() -> Result {
         },
         Method {
             method_id: [opaque_id],
-            name: "load",
-            signature: "(Ljava/lang/Class;)V",
-            mod_bits: MethodModifiers(
-                PRIVATE | STATIC,
-            ),
-        },
-        Method {
-            method_id: [opaque_id],
             name: "main",
             signature: "([Ljava/lang/String;)V",
             mod_bits: MethodModifiers(
                 PUBLIC | STATIC,
+            ),
+        },
+        Method {
+            method_id: [opaque_id],
+            name: "ping",
+            signature: "(Ljava/lang/Object;)V",
+            mod_bits: MethodModifiers(
+                PRIVATE | STATIC,
             ),
         },
         Method {
@@ -343,9 +343,18 @@ fn nested_types() -> Result {
     [
         "Class(Ljava/util/HashMap$EntryIterator;)",
         "Class(Ljava/util/HashMap$EntrySet;)",
+        "Class(Ljava/util/HashMap$EntrySpliterator;)",
         "Class(Ljava/util/HashMap$HashIterator;)",
+        "Class(Ljava/util/HashMap$HashMapSpliterator;)",
+        "Class(Ljava/util/HashMap$KeyIterator;)",
+        "Class(Ljava/util/HashMap$KeySet;)",
+        "Class(Ljava/util/HashMap$KeySpliterator;)",
         "Class(Ljava/util/HashMap$Node;)",
         "Class(Ljava/util/HashMap$TreeNode;)",
+        "Class(Ljava/util/HashMap$UnsafeHolder;)",
+        "Class(Ljava/util/HashMap$ValueIterator;)",
+        "Class(Ljava/util/HashMap$ValueSpliterator;)",
+        "Class(Ljava/util/HashMap$Values;)",
     ]
     "###);
 
@@ -480,7 +489,11 @@ fn constant_pool() -> Result {
 
     let mut values = values
         .into_iter()
-        .map(|v| format!("{:?}", v))
+        .filter_map(|v| match v {
+            // NestMembers were introduced in java 11
+            ConstantPoolValue::Utf8(s) if s.as_ref() == "NestMembers" => None,
+            _ => Some(format!("{:?}", v)),
+        })
         .collect::<Vec<_>>();
     values.sort_unstable();
 
@@ -490,12 +503,14 @@ fn constant_pool() -> Result {
         "Class(\"Basic$NestedClass\")",
         "Class(\"Basic$NestedInterface\")",
         "Class(\"java/io/PrintStream\")",
+        "Class(\"java/lang/Class\")",
         "Class(\"java/lang/Exception\")",
         "Class(\"java/lang/InterruptedException\")",
         "Class(\"java/lang/Object\")",
         "Class(\"java/lang/Runnable\")",
         "Class(\"java/lang/System\")",
         "Class(\"java/lang/Thread\")",
+        "Class(\"java/util/HashMap\")",
         "Fieldref(Ref { class: \"Basic\", name: \"secondInstance\", descriptor: \"LBasic;\" })",
         "Fieldref(Ref { class: \"Basic\", name: \"staticInt\", descriptor: \"I\" })",
         "Fieldref(Ref { class: \"Basic\", name: \"ticks\", descriptor: \"J\" })",
@@ -503,15 +518,19 @@ fn constant_pool() -> Result {
         "Fieldref(Ref { class: \"java/lang/System\", name: \"out\", descriptor: \"Ljava/io/PrintStream;\" })",
         "Long(50)",
         "Methodref(Ref { class: \"Basic\", name: \"<init>\", descriptor: \"()V\" })",
-        "Methodref(Ref { class: \"Basic\", name: \"load\", descriptor: \"(Ljava/lang/Class;)V\" })",
+        "Methodref(Ref { class: \"Basic\", name: \"ping\", descriptor: \"(Ljava/lang/Object;)V\" })",
         "Methodref(Ref { class: \"Basic\", name: \"run\", descriptor: \"()V\" })",
         "Methodref(Ref { class: \"Basic\", name: \"tick\", descriptor: \"()V\" })",
         "Methodref(Ref { class: \"java/io/PrintStream\", name: \"println\", descriptor: \"(Ljava/lang/String;)V\" })",
+        "Methodref(Ref { class: \"java/lang/Class\", name: \"getClasses\", descriptor: \"()[Ljava/lang/Class;\" })",
         "Methodref(Ref { class: \"java/lang/Object\", name: \"<init>\", descriptor: \"()V\" })",
+        "Methodref(Ref { class: \"java/lang/Object\", name: \"getClass\", descriptor: \"()Ljava/lang/Class;\" })",
         "Methodref(Ref { class: \"java/lang/Thread\", name: \"sleep\", descriptor: \"(J)V\" })",
         "NameAndType(NameAndType { name: \"<init>\", descriptor: \"()V\" })",
-        "NameAndType(NameAndType { name: \"load\", descriptor: \"(Ljava/lang/Class;)V\" })",
+        "NameAndType(NameAndType { name: \"getClass\", descriptor: \"()Ljava/lang/Class;\" })",
+        "NameAndType(NameAndType { name: \"getClasses\", descriptor: \"()[Ljava/lang/Class;\" })",
         "NameAndType(NameAndType { name: \"out\", descriptor: \"Ljava/io/PrintStream;\" })",
+        "NameAndType(NameAndType { name: \"ping\", descriptor: \"(Ljava/lang/Object;)V\" })",
         "NameAndType(NameAndType { name: \"println\", descriptor: \"(Ljava/lang/String;)V\" })",
         "NameAndType(NameAndType { name: \"run\", descriptor: \"()V\" })",
         "NameAndType(NameAndType { name: \"secondInstance\", descriptor: \"LBasic;\" })",
@@ -522,10 +541,11 @@ fn constant_pool() -> Result {
         "NameAndType(NameAndType { name: \"unused\", descriptor: \"Ljava/lang/String;\" })",
         "String(\"hello\")",
         "String(\"up\")",
+        "Utf8(\"()Ljava/lang/Class;\")",
         "Utf8(\"()V\")",
+        "Utf8(\"()[Ljava/lang/Class;\")",
         "Utf8(\"(J)V\")",
-        "Utf8(\"(Ljava/lang/Class;)V\")",
-        "Utf8(\"(Ljava/lang/Class<*>;)V\")",
+        "Utf8(\"(Ljava/lang/Object;)V\")",
         "Utf8(\"(Ljava/lang/String;)V\")",
         "Utf8(\"([Ljava/lang/String;)V\")",
         "Utf8(\"<clinit>\")",
@@ -544,23 +564,25 @@ fn constant_pool() -> Result {
         "Utf8(\"LineNumberTable\")",
         "Utf8(\"Ljava/io/PrintStream;\")",
         "Utf8(\"Ljava/lang/String;\")",
-        "Utf8(\"NestMembers\")",
         "Utf8(\"NestedClass\")",
         "Utf8(\"NestedInterface\")",
-        "Utf8(\"Signature\")",
         "Utf8(\"SourceFile\")",
         "Utf8(\"StackMapTable\")",
+        "Utf8(\"getClass\")",
+        "Utf8(\"getClasses\")",
         "Utf8(\"hello\")",
         "Utf8(\"java/io/PrintStream\")",
+        "Utf8(\"java/lang/Class\")",
         "Utf8(\"java/lang/Exception\")",
         "Utf8(\"java/lang/InterruptedException\")",
         "Utf8(\"java/lang/Object\")",
         "Utf8(\"java/lang/Runnable\")",
         "Utf8(\"java/lang/System\")",
         "Utf8(\"java/lang/Thread\")",
-        "Utf8(\"load\")",
+        "Utf8(\"java/util/HashMap\")",
         "Utf8(\"main\")",
         "Utf8(\"out\")",
+        "Utf8(\"ping\")",
         "Utf8(\"println\")",
         "Utf8(\"run\")",
         "Utf8(\"secondInstance\")",
