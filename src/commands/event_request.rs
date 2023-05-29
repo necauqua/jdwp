@@ -18,7 +18,7 @@ use crate::{
 /// which are automatically generated events - see
 /// [Composite](super::event::Composite) command for further details.
 #[jdwp_command(RequestID, 15, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Set {
     /// Event kind to request. Some events may require a capability in order to
     /// be requested.
@@ -61,7 +61,7 @@ pub struct Set {
 /// Automatically generated events do not have a corresponding event request
 /// and may not be cleared using this command.
 #[jdwp_command((), 15, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Clear {
     /// Event kind to clear
     event_kind: EventKind,
@@ -71,5 +71,5 @@ pub struct Clear {
 
 /// Removes all set breakpoints, a no-op if there are no breakpoints set.
 #[jdwp_command((), 15, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ClearAllBreakpoints;

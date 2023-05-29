@@ -17,7 +17,7 @@ use super::jdwp_command;
 /// The line number information is constant unless a new class definition is
 /// installed using [RedefineClasses](super::virtual_machine::RedefineClasses).
 #[jdwp_command(6, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct LineTable {
     /// The class.
     reference_type_id: ReferenceTypeID,
@@ -51,7 +51,7 @@ pub struct Line {
 /// For instance methods, the "this" reference is included in the table. Also,
 /// synthetic variables may be present.
 #[jdwp_command(6, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct VariableTable {
     /// The class.
     reference_type_id: ReferenceTypeID,
@@ -95,7 +95,7 @@ pub struct Variable {
 /// Requires `canGetBytecodes` capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command(Vec<u8>, 6, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Bytecodes {
     /// The class.
     reference_type_id: ReferenceTypeID,
@@ -111,7 +111,7 @@ pub struct Bytecodes {
 /// their bytecodes are the same except for indices into the constant pool and
 /// the referenced constants are equal.
 #[jdwp_command(bool, 6, 4)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct IsObsolete {
     /// The class.
     reference_type_id: ReferenceTypeID,
@@ -129,7 +129,7 @@ pub struct IsObsolete {
 ///
 /// Since JDWP version 1.5.
 #[jdwp_command(6, 5)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct VariableTableWithGeneric {
     /// The class.
     reference_type_id: ReferenceTypeID,

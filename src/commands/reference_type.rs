@@ -20,7 +20,7 @@ use crate::{
 /// corresponding primitive type; for example, "I" is returned as the signature
 /// of the class represented by `java.lang.Integer.TYPE`.
 #[jdwp_command(String, 2, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Signature {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -32,7 +32,7 @@ pub struct Signature {
 /// If the reference type was loaded by the system class loader, the returned
 /// object ID is null.
 #[jdwp_command(Option<ClassLoaderID>, 2, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ClassLoader {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -46,7 +46,7 @@ pub struct ClassLoader {
 /// If the reference type is an array or a primitive class (for example,
 /// `java.lang.Integer.TYPE`), the value of the returned bit mask is undefined.
 #[jdwp_command(TypeModifiers, 2, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Modifiers {
     ref_type: ReferenceTypeID,
 }
@@ -59,7 +59,7 @@ pub struct Modifiers {
 ///
 /// Fields are returned in the order they occur in the class file.
 #[jdwp_command(Vec<Field>, 2, 4)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Fields {
     ref_type: ReferenceTypeID,
 }
@@ -94,7 +94,7 @@ pub struct Field {
 ///
 /// Methods are returned in the order they occur in the class file.
 #[jdwp_command(Vec<Method>, 2, 5)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Methods {
     ref_type: ReferenceTypeID,
 }
@@ -126,7 +126,7 @@ pub struct Method {
 /// Access control is not enforced; for example, the values of private fields
 /// can be obtained.
 #[jdwp_command(Vec<Value>, 2, 6)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct GetValues {
     pub ref_type: ReferenceTypeID,
     pub fields: Vec<FieldID>,
@@ -134,7 +134,7 @@ pub struct GetValues {
 
 /// Returns the source file name in which a reference type was declared.
 #[jdwp_command(String, 2, 7)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SourceFile {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -143,7 +143,7 @@ pub struct SourceFile {
 /// Returns the classes and interfaces directly nested within this type. Types
 /// further nested within those types are not included.
 #[jdwp_command(Vec<TaggedReferenceTypeID>, 2, 8)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct NestedTypes {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -167,7 +167,7 @@ pub struct NestedTypes {
 /// The returned status bits are undefined for array types and for primitive
 /// classes (such as java.lang.Integer.TYPE).
 #[jdwp_command(ClassStatus, 2, 9)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Status {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -178,7 +178,7 @@ pub struct Status {
 /// Interfaces indirectly implemented (extended by the implemented interface or
 /// implemented by a superclass) are not included.
 #[jdwp_command(Vec<InterfaceID>, 2, 10)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Interfaces {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -186,7 +186,7 @@ pub struct Interfaces {
 
 /// Returns the class object corresponding to this type.
 #[jdwp_command(ClassObjectID, 2, 11)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ClassObject {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -197,7 +197,7 @@ pub struct ClassObject {
 /// Since JDWP version 1.4. Requires canGetSourceDebugExtension capability -
 /// see [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command(String, 2, 12)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SourceDebugExtension {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -211,7 +211,7 @@ pub struct SourceDebugExtension {
 ///
 /// Since JDWP version 1.5.
 #[jdwp_command(2, 13)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SignatureWithGeneric {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -241,7 +241,7 @@ pub struct SignatureWithGenericReply {
 /// Since JDWP version 1.5.
 
 #[jdwp_command(Vec<FieldWithGeneric>, 2, 14)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct FieldsWithGeneric {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -280,7 +280,7 @@ pub struct FieldWithGeneric {
 ///
 /// Since JDWP version 1.5.
 #[jdwp_command(Vec<MethodWithGeneric>, 2, 15)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct MethodsWithGeneric {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -312,7 +312,7 @@ pub struct MethodWithGeneric {
 /// Only instances that are reachable for the purposes of garbage collection are
 /// returned.
 #[jdwp_command(Vec<TaggedObjectID>, 2, 16)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Instances {
     /// The reference type ID
     ref_type: ReferenceTypeID,
@@ -326,7 +326,7 @@ pub struct Instances {
 
 /// Returns the class object corresponding to this type.
 #[jdwp_command(2, 17)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ClassFileVersion {
     /// The class
     ref_type: ReferenceTypeID,
@@ -347,7 +347,7 @@ pub struct ClassFileVersionReply {
 /// Since JDWP version 1.6. Requires canGetConstantPool capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command(2, 18)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ConstantPool {
     /// The class
     ref_type: ReferenceTypeID,

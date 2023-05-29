@@ -15,7 +15,7 @@ use super::jdwp_command;
 /// (Typically, this index can be determined for method arguments from the
 /// method signature without access to the local variable table information.)
 #[jdwp_command(Vec<Value>, 16, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct GetValues {
     /// The frame's thread.
     pub thread_id: ThreadID,
@@ -37,7 +37,7 @@ pub struct GetValues {
 /// (Typically, thisindex can be determined for method arguments from the method
 /// signature without access to the local variable table information.)
 #[jdwp_command((), 16, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SetValues {
     /// The frame's thread.
     pub thread_id: ThreadID,
@@ -52,7 +52,7 @@ pub struct SetValues {
 /// If the frame's method is static or native, the reply will contain the null
 /// object reference.
 #[jdwp_command(Option<TaggedObjectID>, 16, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ThisObject {
     /// The frame's thread.
     pub thread_id: ThreadID,
@@ -73,7 +73,7 @@ pub struct ThisObject {
 /// Requires `canPopFrames` capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command((), 16, 4)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct PopFrames {
     /// The frame's thread.
     pub thread_id: ThreadID,

@@ -12,7 +12,7 @@ use super::jdwp_command;
 ///
 /// The version string format is implementation dependent.
 #[jdwp_command(1, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Version;
 
 #[derive(Debug, JdwpReadable)]
@@ -38,7 +38,7 @@ pub struct VersionReply {
 /// The search is confined to loaded classes only; no attempt is made to load a
 /// class of the given signature.
 #[jdwp_command(Vec<UnnamedClass>, 1, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ClassesBySignature {
     /// JNI signature of the class to find (for example, "Ljava/lang/String;")
     signature: String,
@@ -54,7 +54,7 @@ pub struct UnnamedClass {
 
 /// Returns reference types for all classes currently loaded by the target VM.
 #[jdwp_command(Vec<Class>, 1, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct AllClasses;
 
 #[derive(Debug, JdwpReadable)]
@@ -76,14 +76,14 @@ pub struct Class {
 /// Threads that have not yet been started and threads that have completed
 /// their execution are not included in the returned list.
 #[jdwp_command(Vec<ThreadID>, 1, 4)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct AllThreads;
 
 /// Returns all thread groups that do not have a parent. This command may be
 /// used as the first step in building a tree (or trees) of the existing thread
 /// groups.
 #[jdwp_command(Vec<ThreadGroupID>, 1, 5)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct TopLevelThreadGroups;
 
 /// Invalidates this virtual machine mirror.
@@ -104,7 +104,7 @@ pub struct TopLevelThreadGroups;
 /// Resources originating in this VirtualMachine (ObjectReferences,
 /// ReferenceTypes, etc.) will become invalid.
 #[jdwp_command((), 1, 6)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Dispose;
 
 /// Returns the sizes of variably-sized data types in the target VM.
@@ -112,7 +112,7 @@ pub struct Dispose;
 /// The returned values indicate the number of bytes used by the identifiers in
 /// command and reply packets.
 #[jdwp_command(IDSizeInfo, 1, 7)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct IDSizes;
 
 #[derive(Debug, Clone, JdwpReadable)]
@@ -137,7 +137,7 @@ pub struct IDSizeInfo {
 /// be resumed through the VM-level resume command or the thread-level resume
 /// command the same number of times it has been suspended.
 #[jdwp_command((), 1, 8)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Suspend;
 
 /// Resumes execution of the application after the suspend command or an event
@@ -148,7 +148,7 @@ pub struct Suspend;
 /// If a particular thread is suspended n times, it must resumed n times before
 /// it will continue.
 #[jdwp_command((), 1, 9)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Resume;
 
 /// Terminates the target VM with the given exit code.
@@ -162,14 +162,14 @@ pub struct Resume;
 ///
 /// A thread death exception is not thrown and finally blocks are not run.
 #[jdwp_command((), 1, 10)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Exit {
     exit_code: i32,
 }
 
 /// Creates a new string object in the target VM and returns its id.
 #[jdwp_command(StringID, 1, 11)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct CreateString {
     /// UTF-8 characters to use in the created string
     string: String,
@@ -183,7 +183,7 @@ pub struct CreateString {
 /// The commands associated with each capability will return the
 /// NOT_IMPLEMENTED error if the capability is not available.
 #[jdwp_command(1, 12)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Capabilities;
 
 #[derive(Debug, JdwpReadable)]
@@ -214,7 +214,7 @@ pub struct CapabilitiesReply {
 ///
 /// If the bootclasspath is not defined returns an empty list.
 #[jdwp_command(1, 13)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ClassPaths;
 
 #[derive(Debug, JdwpReadable)]
@@ -259,7 +259,7 @@ pub struct ClassPathsReply {
 /// This description assumes reference counting, a back-end may use any
 /// implementation which operates equivalently.
 #[jdwp_command((), 1, 14)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct DisposeObjects {
     requests: Vec<(ObjectID, u32)>,
 }
@@ -277,7 +277,7 @@ pub struct DisposeObjects {
 /// Responses to commands are never held and are not affected by this command.
 /// If events are already being held, this command is ignored.
 #[jdwp_command((), 1, 15)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct HoldEvents;
 
 /// Tells the target VM to continue sending events.
@@ -287,7 +287,7 @@ pub struct HoldEvents;
 /// If there is no current HoldEvents command in effect, this command is
 /// ignored.
 #[jdwp_command((), 1, 16)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ReleaseEvents;
 
 /// Retrieve all of this VM's capabilities.
@@ -300,7 +300,7 @@ pub struct ReleaseEvents;
 ///
 /// Since JDWP version 1.4.
 #[jdwp_command(1, 17)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct CapabilitiesNew;
 
 #[derive(JdwpReadable)]
@@ -421,7 +421,7 @@ impl Debug for CapabilitiesNewReply {
 /// or the `can_unrestrictedly_redefine_classes` to redefine classes in
 /// arbitrary ways.
 #[jdwp_command((), 1, 18)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct RedefineClasses {
     classes: Vec<(ReferenceTypeID, Vec<u8>)>,
 }
@@ -429,7 +429,7 @@ pub struct RedefineClasses {
 /// Set the default stratum. Requires `can_set_default_stratum` capability -
 /// see [CapabilitiesNew].
 #[jdwp_command((), 1, 19)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SetDefaultStratum {
     /// default stratum, or empty string to use reference type default.
     stratum_id: String,
@@ -445,7 +445,7 @@ pub struct SetDefaultStratum {
 ///
 /// Since JDWP version 1.5.
 #[jdwp_command(Vec<GenericClass>, 1, 20)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct AllClassesWithGeneric;
 
 #[derive(Debug, JdwpReadable)]
@@ -472,7 +472,7 @@ pub struct GenericClass {
 /// Since JDWP version 1.6. Requires canGetInstanceInfo capability - see
 /// [CapabilitiesNew].
 #[jdwp_command(Vec<u64>, 1, 21)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct InstanceCounts {
     /// A list of reference type IDs.
     ref_types: Vec<ReferenceTypeID>,

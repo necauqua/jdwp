@@ -1,14 +1,14 @@
 use jdwp_macros::jdwp_command;
 
 use crate::{
-    codec::{JdwpReadable, JdwpWritable},
+    codec::{JdwpReadable, JdwpReader, JdwpWritable, JdwpWriter},
     enums::{SuspendStatus, ThreadStatus},
     types::{FrameID, Location, TaggedObjectID, ThreadGroupID, ThreadID, Value},
 };
 
 /// Returns the thread name.
 #[jdwp_command(String, 11, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Name {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -33,7 +33,7 @@ pub struct Name {
 /// [ThreadStatus] command.) For example, if it was Running, it will still
 /// appear running to other threads.
 #[jdwp_command((), 11, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Suspend {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -46,7 +46,7 @@ pub struct Suspend {
 /// thread is decremented. If it is decremented to 0, the thread will continue
 /// to execute.
 #[jdwp_command((), 11, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Resume {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -58,7 +58,7 @@ pub struct Resume {
 /// running. the suspend status provides information on the thread's suspension,
 /// if any.
 #[jdwp_command((ThreadStatus, SuspendStatus), 11, 4)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Status {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -66,7 +66,7 @@ pub struct Status {
 
 /// Returns the thread group that contains a given thread.
 #[jdwp_command(ThreadGroupID, 11, 5)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ThreadGroup {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -78,14 +78,31 @@ pub struct ThreadGroup {
 /// by its caller, and so on. The thread must be suspended, and the returned
 /// frameID is valid only while the thread is suspended.
 #[jdwp_command(Vec<(FrameID, Location)>, 11, 6)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Frames {
     /// The thread object ID.
     pub thread: ThreadID,
     /// The index of the first frame to retrieve.
     pub start_frame: u32,
-    /// The count of frames to retrieve (-1 means all remaining).
-    pub length: i32,
+    /// The amount of frames to retrieve.
+    pub limit: FrameLimit,
+}
+
+/// A nice readable enum to be used in place of raw `i32` with a special meaning
+/// for -1.
+#[derive(Debug, Clone)]
+pub enum FrameLimit {
+    Limit(u32),
+    AllRemaining,
+}
+
+impl JdwpWritable for FrameLimit {
+    fn write<W: std::io::Write>(&self, write: &mut JdwpWriter<W>) -> std::io::Result<()> {
+        match self {
+            FrameLimit::Limit(n) => n.write(write),
+            FrameLimit::AllRemaining => (-1i32).write(write),
+        }
+    }
 }
 
 /// Returns the count of frames on this thread's stack.
@@ -96,7 +113,7 @@ pub struct Frames {
 /// Returns [ThreadNotSuspended](crate::enums::ErrorCode::ThreadNotSuspended) if
 /// not suspended.
 #[jdwp_command(u32, 11, 7)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct FrameCount {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -110,7 +127,7 @@ pub struct FrameCount {
 /// Requires `can_get_owned_monitor_info` capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command(Vec<TaggedObjectID>, 11, 8)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct OwnedMonitors {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -126,7 +143,7 @@ pub struct OwnedMonitors {
 /// Requires `can_get_current_contended_monitor` capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command(Option<TaggedObjectID>, 11, 9)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct CurrentContendedMonitor {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -135,7 +152,7 @@ pub struct CurrentContendedMonitor {
 /// Stops the thread with an asynchronous exception, as if done by
 /// `java.lang.Thread.stop`
 #[jdwp_command((), 11, 10)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Stop {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -147,7 +164,7 @@ pub struct Stop {
 
 /// Interrupt the thread, as if done by `java.lang.Thread.interrupt`
 #[jdwp_command((), 11, 11)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Interrupt {
     /// The thread object ID.
     pub thread: ThreadID,
@@ -159,39 +176,44 @@ pub struct Interrupt {
 /// through the thread-level or VM-level suspend commands without a
 /// corresponding resume
 #[jdwp_command(u32, 11, 12)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SuspendCount {
     /// The thread object ID.
     pub thread: ThreadID,
-    /// The number of times the thread has been suspended.
-    pub suspend_count: u32,
 }
 
 /// Returns monitor objects owned by the thread, along with stack depth at which
 /// the monitor was acquired.
 ///
-/// Returns stack depth of -1 if the implementation cannot determine the stack
-/// depth (e.g., for monitors acquired by JNI MonitorEnter). The thread must be
-/// suspended, and the returned information is relevant only while the thread is
-/// suspended.
+/// Stack depth can be unknown (e.g., for monitors acquired by JNI
+/// MonitorEnter). The thread must be suspended, and the returned information is
+/// relevant only while the thread is suspended.
 ///
 /// Requires `can_get_monitor_frame_info` capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 ///
 /// Since JDWP version 1.6.
-#[jdwp_command(Vec<Monitor>, 11, 13)]
-#[derive(Debug, JdwpWritable)]
+#[jdwp_command(Vec<(TaggedObjectID, StackDepth)>, 11, 13)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct OwnedMonitorsStackDepthInfo {
     /// The thread object ID.
     pub thread: ThreadID,
 }
 
-#[derive(Debug, JdwpReadable)]
-pub struct Monitor {
-    /// An owned monitor
-    pub monitor: TaggedObjectID,
-    /// Stack depth location where monitor was acquired
-    pub stack_depth: i32,
+#[derive(Debug, Clone)]
+pub enum StackDepth {
+    Depth(u32),
+    Unknown,
+}
+
+impl JdwpReadable for StackDepth {
+    fn read<R: std::io::Read>(read: &mut JdwpReader<R>) -> std::io::Result<Self> {
+        let depth = match i32::read(read)? {
+            -1 => StackDepth::Unknown,
+            n => StackDepth::Depth(n as u32),
+        };
+        Ok(depth)
+    }
 }
 
 /// Force a method to return before it reaches a return statement.
@@ -230,12 +252,10 @@ pub struct Monitor {
 /// Since JDWP version 1.6. Requires `can_force_early_return` capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command((), 11, 14)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ForceEarlyReturn {
     /// The thread object ID.
     pub thread: ThreadID,
-    /// The frame object ID.
-    pub frame: FrameID,
     /// The value to return.
     pub value: Value,
 }

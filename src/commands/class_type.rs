@@ -10,7 +10,7 @@ use super::{JdwpReadable, JdwpWritable};
 ///
 /// The return is null if the class is java.lang.Object.
 #[jdwp_command(Option<ClassID>, 3, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Superclass {
     /// The class type ID.
     class_id: ClassID,
@@ -31,7 +31,7 @@ pub struct Superclass {
 /// For object values, there must exist a widening reference conversion from the
 /// value's type to thefield's type and the field's type must be loaded.
 #[jdwp_command((), 3, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SetValues {
     /// The class type ID.
     class_id: ClassID,
@@ -88,7 +88,7 @@ pub struct SetValues {
 /// method invocation continues.
 
 #[jdwp_command(3, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct InvokeMethod {
     /// The class type ID.
     class_id: ClassID,
@@ -103,7 +103,7 @@ pub struct InvokeMethod {
 }
 
 #[jdwp_command(3, 4)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct NewInstance {
     /// The class type ID.
     class_id: ClassID,

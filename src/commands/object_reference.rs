@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[jdwp_command(TaggedReferenceTypeID, 9, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ReferenceType {
     /// The object ID
     object: ObjectID,
@@ -21,7 +21,7 @@ pub struct ReferenceType {
 /// superinterfaces, or implemented interfaces. Access control is not enforced;
 /// for example, the values of private fields can be obtained.
 #[jdwp_command(Vec<Value>, 9, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct GetValues {
     /// The object ID
     object: ObjectID,
@@ -38,7 +38,7 @@ pub struct GetValues {
 /// there must be a widening reference conversion from the value's type to the
 /// field's type and the field's type must be loaded.
 #[jdwp_command((), 9, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SetValues {
     /// The object ID
     object: ObjectID,
@@ -53,7 +53,7 @@ pub struct SetValues {
 /// Requires `can_get_monitor_info` capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command(9, 5)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct MonitorInfo {
     /// The object ID
     object: ObjectID,
@@ -114,7 +114,7 @@ pub struct MonitorInfoReply {
 /// If the target VM is disconnected during the invoke (for example, through the
 /// VirtualMachine dispose command) the method invocation continues.
 #[jdwp_command(9, 6)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct InvokeMethod {
     /// The object ID
     object: ObjectID,
@@ -146,7 +146,7 @@ pub struct InvokeMethod {
 /// collection in the target VM and, consequently, may result in application
 /// behavior under the debugger that differs from its non-debugged behavior.
 #[jdwp_command((), 9, 7)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct DisableCollection {
     /// The object ID
     object: ObjectID,
@@ -159,7 +159,7 @@ pub struct DisableCollection {
 /// only if garbage collection was previously disabled with the
 /// [DisableCollection] command.
 #[jdwp_command((), 9, 8)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct EnableCollection {
     /// The object ID
     object: ObjectID,
@@ -167,7 +167,7 @@ pub struct EnableCollection {
 
 /// Determines whether an object has been garbage collected in the target VM.
 #[jdwp_command(bool, 9, 9)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct IsCollected {
     /// The object ID
     object: ObjectID,
@@ -184,7 +184,7 @@ pub struct IsCollected {
 /// Requires `can_get_instance_info` capability - see
 /// [CapabilitiesNew](super::virtual_machine::CapabilitiesNew).
 #[jdwp_command(Vec<TaggedObjectID>, 9, 10)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct ReferringObjects {
     /// The object ID
     object: ObjectID,

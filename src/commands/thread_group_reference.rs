@@ -6,7 +6,7 @@ use crate::{
 
 /// Returns the thread group name.
 #[jdwp_command(String, 12, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Name {
     /// The thread group object ID
     group: ThreadGroupID,
@@ -14,7 +14,7 @@ pub struct Name {
 
 /// Returns the thread group, if any, which contains a given thread group.
 #[jdwp_command(Option<ThreadGroupID>, 12, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Parent {
     /// The thread group object ID
     group: ThreadGroupID,
@@ -29,7 +29,7 @@ pub struct Parent {
 ///
 /// See `java.lang.ThreadGroup` for information about active ThreadGroups.
 #[jdwp_command(12, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Children {
     /// The thread group object ID
     group: ThreadGroupID,

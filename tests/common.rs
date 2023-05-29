@@ -1,5 +1,6 @@
 use std::{
     error::Error,
+    fmt::Debug,
     format,
     io::{BufRead, BufReader, ErrorKind},
     net::TcpListener,
@@ -14,8 +15,8 @@ pub type Result<T = ()> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Debug)]
 pub struct JvmHandle {
-    jdwp_client: JdwpClient,
     pub jvm_process: Child,
+    jdwp_client: JdwpClient,
     port: u16,
 }
 

@@ -7,7 +7,7 @@ use super::jdwp_command;
 
 /// Returns the number of components in a given array.
 #[jdwp_command(i32, 13, 1)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct Length {
     /// The array object ID
     array_id: ArrayID,
@@ -17,7 +17,7 @@ pub struct Length {
 ///
 /// The specified range must be within the bounds of the array.
 #[jdwp_command(ArrayRegion, 13, 2)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct GetValues {
     /// The array object ID
     array_id: ArrayID,
@@ -38,7 +38,7 @@ pub struct GetValues {
 /// value's type to the array component type and the array component type must
 /// be loaded.
 #[jdwp_command((), 13, 3)]
-#[derive(Debug, JdwpWritable)]
+#[derive(Debug, Clone, JdwpWritable)]
 pub struct SetValues {
     /// The array object ID
     array_id: ArrayID,

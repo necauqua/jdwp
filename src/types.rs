@@ -561,9 +561,9 @@ tagged_io! {
 /// initializer of an interface.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct Location {
-    reference_id: TaggedReferenceTypeID,
-    method_id: MethodID,
-    index: u64,
+    pub reference_id: TaggedReferenceTypeID,
+    pub method_id: MethodID,
+    pub index: u64,
 }
 
 macro_rules! optional_impl {

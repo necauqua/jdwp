@@ -1,6 +1,7 @@
 import java.util.HashMap;
+import java.util.function.IntSupplier;
 
-class Basic implements Runnable {
+class Basic implements IntSupplier {
 
     static int staticInt = 42;
     public static Basic secondInstance = new Basic();
@@ -14,7 +15,7 @@ class Basic implements Runnable {
     }
 
     @Override
-    public void run() {
+    public int getAsInt() {
         try {
             // make sure nested is absolutely totally surely loaded
             Class.forName("Basic$NestedClass");
@@ -36,10 +37,11 @@ class Basic implements Runnable {
                 break;
             }
         }
+        return 0;
     }
 
     public static void main(String[] args) throws Exception {
-        new Basic().run();
+        System.exit(new Basic().getAsInt());
     }
 
     private static void ping(Object ignored) {

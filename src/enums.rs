@@ -162,6 +162,7 @@ readable_enum! {
 readable_enum! {
     SuspendStatus: u32,
 
+    NotSuspended = 0,
     Suspended = 1,
 }
 
