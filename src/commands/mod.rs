@@ -8,10 +8,7 @@ use crate::{
     CommandId,
 };
 
-use crate::{
-    enums::Tag,
-    types::{ArrayID, ArrayTypeID, ClassLoaderID, ObjectID, TaggedReferenceTypeID},
-};
+use crate::{enums::Tag, types::*};
 
 pub mod array_type {
     use super::*;
@@ -90,8 +87,22 @@ pub mod string_reference {
 /// This module is defined to mirror the JDWP command set, which is empty
 pub mod field {}
 
-/// This module is defined to mirror the JDWP command set, which is empty
-pub mod interface_type {}
+pub mod interface_type {
+    use super::*;
+
+    #[jdwp_command(5, 1)]
+    #[derive(Debug, JdwpWritable)]
+    pub struct InvokeMethod {
+        /// The interface type ID
+        interface_id: InterfaceID,
+        /// The thread in which to invoke
+        thread_id: ThreadID,
+        /// The method to invoke
+        method_id: MethodID,
+        /// Invocation options
+        arguments: Vec<Value>,
+    }
+}
 
 pub mod array_reference;
 pub mod class_type;

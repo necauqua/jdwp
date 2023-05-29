@@ -2,11 +2,7 @@ use std::io::{self, Read};
 
 use jdwp_macros::jdwp_command;
 
-use crate::{
-    codec::JdwpReader,
-    enums::InvokeOptions,
-    types::{ClassID, FieldID, MethodID, TaggedObjectID, ThreadID, UntaggedValue, Value},
-};
+use crate::{codec::JdwpReader, enums::InvokeOptions, types::*};
 
 use super::{JdwpReadable, JdwpWritable};
 
@@ -104,16 +100,6 @@ pub struct InvokeMethod {
     arguments: Vec<Value>,
     // Invocation options
     options: InvokeOptions,
-}
-
-// todo: figure out what happens with value if exception is thrown and make a
-// enum reply type similar to NewInstanceReply
-#[derive(Debug, JdwpReadable)]
-pub struct InvokeMethodReply {
-    /// The returned value.
-    pub value: Value,
-    /// The thrown exception.
-    pub exception: Option<TaggedObjectID>,
 }
 
 #[jdwp_command(3, 4)]

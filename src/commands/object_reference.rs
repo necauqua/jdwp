@@ -1,12 +1,10 @@
-use std::io::{self, Read};
-
 use super::jdwp_command;
 use crate::{
-    codec::{JdwpReadable, JdwpReader, JdwpWritable},
+    codec::{JdwpReadable, JdwpWritable},
     enums::InvokeOptions,
     types::{
-        ClassID, FieldID, ObjectID, TaggedObjectID, TaggedReferenceTypeID, ThreadID, UntaggedValue,
-        Value,
+        ClassID, FieldID, InvokeMethodReply, ObjectID, TaggedObjectID, TaggedReferenceTypeID,
+        ThreadID, UntaggedValue, Value,
     },
 };
 
@@ -130,29 +128,6 @@ pub struct InvokeMethod {
     arguments: Vec<Value>,
     /// Invocation options
     options: InvokeOptions,
-}
-
-// todo move this to types and use it for static invokes as well
-#[derive(Debug)]
-pub enum InvokeMethodReply {
-    Value(Value),
-    Exception(TaggedObjectID),
-}
-
-impl JdwpReadable for InvokeMethodReply {
-    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-        let new_object = Option::<Value>::read(read)?;
-        let exception = Option::<TaggedObjectID>::read(read)?;
-
-        match (new_object, exception) {
-            (Some(new_object), None) => Ok(InvokeMethodReply::Value(new_object)),
-            (None, Some(exception)) => Ok(InvokeMethodReply::Exception(exception)),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid InvokeMethod reply",
-            )),
-        }
-    }
 }
 
 /// Prevents garbage collection for the given object.

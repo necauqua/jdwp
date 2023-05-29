@@ -185,26 +185,3 @@ macro_rules! assert_snapshot {
         });
     };
 }
-
-pub trait TryMapExt<T> {
-    fn try_map<E, F, U, M>(self, f: F) -> std::result::Result<Vec<U>, E>
-    where
-        F: FnMut(T) -> std::result::Result<U, M>,
-        E: From<M>;
-}
-
-impl<T, I> TryMapExt<T> for I
-where
-    I: IntoIterator<Item = T>,
-{
-    fn try_map<E, F, U, M>(self, mut f: F) -> std::result::Result<Vec<U>, E>
-    where
-        F: FnMut(T) -> std::result::Result<U, M>,
-        E: From<M>,
-    {
-        self.into_iter().try_fold(Vec::new(), move |mut acc, item| {
-            acc.push(f(item)?);
-            Ok(acc)
-        })
-    }
-}

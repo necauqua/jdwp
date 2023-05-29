@@ -23,9 +23,10 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 /// collection of the object.
 /// Any attempt to access a a garbage collected object with its object ID will
 /// result in the INVALID_OBJECT error code.
-/// Garbage collection can be disabled with the DisableCollection command,
-/// but it is not usually necessary to do so.
-#[derive(Copy, Clone, PartialEq, Eq)]
+/// Garbage collection can be disabled with the
+/// [DisableCollection](super::commands::object_reference::DisableCollection)
+/// command, but it is not usually necessary to do so.
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ObjectID(u64);
 
 /// Uniquely identifies a method in some class in the target VM.
@@ -38,7 +39,7 @@ pub struct ObjectID(u64);
 ///
 /// The [ReferenceTypeID] can identify either the declaring type of the method
 /// or a subtype.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct MethodID(u64);
 
 /// Uniquely identifies a field in some class in the target VM.
@@ -51,7 +52,7 @@ pub struct MethodID(u64);
 ///
 /// The [ReferenceTypeID] can identify either the declaring type of the field
 /// or a subtype.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct FieldID(u64);
 
 /// Uniquely identifies a frame in the target VM.
@@ -60,7 +61,7 @@ pub struct FieldID(u64);
 /// only within a given thread).
 ///
 /// The [FrameID] need only be valid during the time its thread is suspended.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct FrameID(u64);
 
 /// Uniquely identifies a reference type in the target VM.
@@ -72,7 +73,7 @@ pub struct FrameID(u64);
 /// commands and replies throughout its lifetime A [ReferenceTypeID] is not
 /// reused to identify a different reference type, regardless of whether the
 /// referenced class has been unloaded.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ReferenceTypeID(u64);
 
 macro_rules! ids {
@@ -129,56 +130,56 @@ macro_rules! ids {
 }
 
 ids! {
-    object_id_size: ObjectID,
-    method_id_size: MethodID,
     field_id_size: FieldID,
-    frame_id_size: FrameID,
+    method_id_size: MethodID,
+    object_id_size: ObjectID,
     reference_type_id_size: ReferenceTypeID,
+    frame_id_size: FrameID,
 }
 
 /// Uniquely identifies an object in the target VM that is known to be a thread.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ThreadID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be a thread
 /// group.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ThreadGroupID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be a string
 /// object.
 ///
 /// Note: this is very different from string, which is a value.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct StringID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be a class
 /// loader object.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ClassLoaderID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be a class
 /// object.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ClassObjectID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be an array.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ArrayID(ObjectID);
 
 /// Uniquely identifies a reference type in the target VM that is known to be
 /// a class type.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ClassID(ReferenceTypeID);
 
 /// Uniquely identifies a reference type in the target VM that is known to be
 /// an interface type.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct InterfaceID(ReferenceTypeID);
 
 /// Uniquely identifies a reference type in the target VM that is known to be
 /// an array type.
-#[derive(Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ArrayTypeID(ReferenceTypeID);
 
 macro_rules! wrapper_ids {
@@ -356,7 +357,7 @@ tagged_io! {
     { Self::Void => Ok(()) }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TaggedObjectID {
     /// an array object
     Array(ArrayID),
@@ -491,7 +492,7 @@ tagged_io! {
 /// This construct is not separated into a separate value type in JDWP spec and
 /// exists only here in Rust, in JDWP it's usually represented by a pair of
 /// [TypeTag] and [ReferenceTypeID] values.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TaggedReferenceTypeID {
     /// a class reference
     Class(ClassID),
@@ -558,7 +559,7 @@ tagged_io! {
 /// identifies a class or an interface. Almost all locations are within
 /// classes, but it is possible to have executable code in the static
 /// initializer of an interface.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct Location {
     reference_id: TaggedReferenceTypeID,
     method_id: MethodID,
@@ -595,7 +596,7 @@ optional_impl![Value, TaggedObjectID, Location];
 
 /// An opaque type for the request id, which is represented in JDWP docs as just
 /// a raw integer and exists only here in Rust similar to all the other IDs.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct RequestID(i32);
 
 impl RequestID {
@@ -627,14 +628,14 @@ impl RequestID {
 /// In either case subsequent events are never reported for this request.
 ///
 /// This modifier can be used with any event kind.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct Count {
     /// Count before event. One for one-off
     pub count: i32,
 }
 
 /// Conditional on expression
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct Conditional {
     /// For the future
     pub expr_id: i32,
@@ -642,7 +643,7 @@ pub struct Conditional {
 
 /// Restricts reported events to those in the given thread.
 /// This modifier can be used with any event kind except for class unload.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ThreadOnly {
     /// Required thread
     pub thread: ThreadID,
@@ -663,7 +664,7 @@ pub struct ThreadOnly {
 ///
 /// This modifier can be used with any event kind except class unload, thread
 /// start, and thread end.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ClassOnly {
     /// Required class
     pub class: ReferenceTypeID,
@@ -683,7 +684,7 @@ pub struct ClassOnly {
 ///
 /// This modifier can be used with any event kind except thread start and
 /// thread end.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ClassMatch {
     /// Required class pattern.
     ///
@@ -707,7 +708,7 @@ pub struct ClassMatch {
 ///
 /// This modifier can be used with any event kind except thread start and
 /// thread end.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ClassExclude {
     /// Disallowed class pattern.
     ///
@@ -721,7 +722,7 @@ pub struct ClassExclude {
 ///
 /// This modifier can be used with breakpoint, field access, field
 /// modification, step, and exception event kinds.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct LocationOnly {
     /// Required location
     pub location: Location,
@@ -731,7 +732,7 @@ pub struct LocationOnly {
 /// uncaught.
 ///
 /// This modifier can be used with exception event kinds only.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct ExceptionOnly {
     /// Exception to report. `None` means report exceptions of all types.
     ///
@@ -754,7 +755,7 @@ pub struct ExceptionOnly {
 ///
 /// This modifier can be used with field access and field modification event
 /// kinds only.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct FieldOnly {
     /// Type in which field is declared
     pub declaring: ReferenceTypeID,
@@ -766,7 +767,7 @@ pub struct FieldOnly {
 /// constraints.
 ///
 /// This modifier can be used with step event kinds only.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct Step {
     /// Thread in which to step
     pub thread: ThreadID,
@@ -785,7 +786,7 @@ pub struct Step {
 /// class unload, thread start, and thread end.
 ///
 /// Introduced in JDWP version 1.4.
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct InstanceOnly {
     /// Required 'this' object
     pub instance: ObjectID,
@@ -803,7 +804,7 @@ pub struct InstanceOnly {
 ///
 /// Requires the `can_use_source_name_filters` capability - see
 /// [CapabilitiesNew](crate::commands::virtual_machine::CapabilitiesNew).
-#[derive(Debug, Clone, PartialEq, Eq, JdwpReadable, JdwpWritable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct SourceNameMatch {
     /// Required source name pattern.
     /// Matches are limited to exact matches of the given pattern and matches
@@ -812,7 +813,7 @@ pub struct SourceNameMatch {
     pub source_name_pattern: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Modifier {
     Count(Count),
     Conditional(Conditional),
@@ -832,4 +833,29 @@ tagged_io! {
     Modifier <-> ModifierKind,
     Count, Conditional, ThreadOnly, ClassOnly, ClassMatch, ClassExclude, LocationOnly, ExceptionOnly, FieldOnly, Step, InstanceOnly, SourceNameMatch
     {} {}
+}
+
+/// A response from 3 types of invoke method commands: virtual, static and
+/// interface static. The response is either a value or an exception - we model
+/// it with a enum with a custom read implementation for better ergonomics.
+#[derive(Debug)]
+pub enum InvokeMethodReply {
+    Value(Value),
+    Exception(TaggedObjectID),
+}
+
+impl JdwpReadable for InvokeMethodReply {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        let new_object = Option::<Value>::read(read)?;
+        let exception = Option::<TaggedObjectID>::read(read)?;
+
+        match (new_object, exception) {
+            (Some(new_object), None) => Ok(InvokeMethodReply::Value(new_object)),
+            (None, Some(exception)) => Ok(InvokeMethodReply::Exception(exception)),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid InvokeMethod reply",
+            )),
+        }
+    }
 }

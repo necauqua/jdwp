@@ -16,10 +16,9 @@ use jdwp::{
     types::{InterfaceID, ReferenceTypeID, TaggedReferenceTypeID},
 };
 
-#[macro_use]
 mod common;
 
-use common::{Result, TryMapExt};
+use common::Result;
 
 const OUR_CLS: &str = "LBasic;";
 const ARRAY_CLS: &str = "[I";
@@ -35,10 +34,13 @@ where
     C: Command + JdwpWritable + Debug,
     C::Output: JdwpReadable + Debug,
 {
-    signatures.try_map(|item| {
-        let id = client.send(ClassesBySignature::new(*item))?[0].type_id;
-        client.send(new(*id))
-    })
+    signatures
+        .iter()
+        .map(|item| {
+            let id = client.send(ClassesBySignature::new(*item))?[0].type_id;
+            Ok(client.send(new(*id))?)
+        })
+        .collect()
 }
 
 trait GetSignature {
@@ -63,8 +65,10 @@ where
     S: GetSignature,
     I: IntoIterator<Item = S>,
 {
-    let sigs: Result<_> = iterable.try_map(|ref_id| ref_id.get_signature(client));
-    let mut sigs = sigs?;
+    let mut sigs = iterable
+        .into_iter()
+        .map(|ref_id| ref_id.get_signature(client))
+        .collect::<Result<Vec<_>>>()?;
     sigs.sort_unstable();
     Ok(sigs)
 }

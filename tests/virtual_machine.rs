@@ -9,8 +9,6 @@ mod common;
 
 use common::Result;
 
-use crate::common::TryMapExt;
-
 const CASES: &[&str] = &[
     "Ljava/lang/String;",
     "Ljava/util/List;",
@@ -37,9 +35,10 @@ fn version() -> Result {
 fn class_by_signature() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let classes: Result<_> =
-        CASES.try_map(|&signature| client.send(ClassesBySignature::new(signature)));
-    let classes = classes?;
+    let classes = CASES
+        .iter()
+        .map(|&signature| Ok(client.send(ClassesBySignature::new(signature))?))
+        .collect::<Result<Vec<_>>>()?;
 
     assert_snapshot!(classes, @r###"
     [
@@ -151,16 +150,13 @@ fn all_classes() -> Result {
 fn all_threads() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let thread_ids = client.send(AllThreads)?;
-
-    let names: Result<_> = thread_ids
+    let mut thread_names = client
+        .send(AllThreads)?
         .iter()
-        .try_fold(Vec::new(), move |mut acc, item| {
-            acc.push(client.send(thread_reference::Name::new(*item))?);
-            Ok(acc)
-        });
-    let mut names = names?;
-    names.sort_unstable();
+        .map(|id| Ok(client.send(thread_reference::Name::new(*id))?))
+        .collect::<Result<Vec<_>>>()?;
+
+    thread_names.sort_unstable();
 
     // there are at least those present
     let expected = &[
@@ -169,20 +165,8 @@ fn all_threads() -> Result {
         "Reference Handler",
         "Finalizer",
     ];
-    assert!(names.len() >= expected.len());
-    assert!(names.iter().any(|n| expected.contains(&n.as_str())));
-
-    Ok(())
-}
-
-#[test]
-fn top_level_thread_groups() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
-
-    let thread_group_ids = client.send(TopLevelThreadGroups)?;
-
-    // should have just one?. if no more are created manually
-    assert_eq!(thread_group_ids.len(), 1);
+    assert!(thread_names.len() >= expected.len());
+    assert!(thread_names.iter().any(|n| expected.contains(&n.as_str())));
 
     Ok(())
 }

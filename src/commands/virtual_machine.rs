@@ -403,7 +403,8 @@ impl Debug for CapabilitiesNewReply {
 ///
 /// If there are active stack frames in methods of the redefined classes in the
 /// target VM then those active frames continue to run the bytecodes of the
-/// original method. These methods are considered obsolete - see IsObsolete.
+/// original method. These methods are considered obsolete - see
+/// [IsObsolete](super::method::IsObsolete).
 ///
 /// The methods in the redefined classes will be used for new invokes in the
 /// target VM. The original method ID refers to the redefined method.
