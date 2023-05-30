@@ -2,6 +2,7 @@ use super::jdwp_command;
 use crate::{
     codec::{JdwpReadable, JdwpWritable},
     enums::InvokeOptions,
+    functional::Coll,
     types::{
         ClassID, FieldID, InvokeMethodReply, ObjectID, TaggedObjectID, TaggedReferenceTypeID,
         ThreadID, UntaggedValue, Value,
@@ -20,13 +21,13 @@ pub struct ReferenceType {
 /// Each field must be member of the object's type or one of its superclasses,
 /// superinterfaces, or implemented interfaces. Access control is not enforced;
 /// for example, the values of private fields can be obtained.
-#[jdwp_command(Vec<Value>, 9, 2)]
+#[jdwp_command(C::Map<Value>, 9, 2)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct GetValues {
+pub struct GetValues<C: Coll<Item = FieldID>> {
     /// The object ID
     object: ObjectID,
     /// Fields to get
-    fields: Vec<FieldID>,
+    fields: C,
 }
 
 /// Sets the value of one or more instance fields.
@@ -39,11 +40,11 @@ pub struct GetValues {
 /// field's type and the field's type must be loaded.
 #[jdwp_command((), 9, 3)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct SetValues {
+pub struct SetValues<'a> {
     /// The object ID
     object: ObjectID,
     /// Fields and the values to set them to
-    fields: Vec<(FieldID, UntaggedValue)>,
+    fields: &'a [(FieldID, UntaggedValue)],
 }
 
 /// Returns monitor information for an object.
@@ -115,7 +116,7 @@ pub struct MonitorInfoReply {
 /// VirtualMachine dispose command) the method invocation continues.
 #[jdwp_command(9, 6)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct InvokeMethod {
+pub struct InvokeMethod<'a> {
     /// The object ID
     object: ObjectID,
     /// The thread in which to invoke
@@ -125,7 +126,7 @@ pub struct InvokeMethod {
     /// The method to invoke
     method: FieldID,
     /// The arguments
-    arguments: Vec<Value>,
+    arguments: &'a [Value],
     /// Invocation options
     options: InvokeOptions,
 }

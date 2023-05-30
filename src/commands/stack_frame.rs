@@ -1,6 +1,7 @@
 use crate::{
     codec::JdwpWritable,
     enums::Tag,
+    functional::Coll,
     types::{FrameID, TaggedObjectID, ThreadID, Value},
 };
 
@@ -14,15 +15,15 @@ use super::jdwp_command;
 /// if the front-end is able to determine the correct local variable index.
 /// (Typically, this index can be determined for method arguments from the
 /// method signature without access to the local variable table information.)
-#[jdwp_command(Vec<Value>, 16, 1)]
+#[jdwp_command(C::Map<Value>, 16, 1)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct GetValues {
+pub struct GetValues<C: Coll<Item = (u32, Tag)>> {
     /// The frame's thread.
     pub thread_id: ThreadID,
     /// The frame ID.
     pub frame_id: FrameID,
     /// Local variable indices and types to get.
-    pub slots: Vec<(u32, Tag)>,
+    pub slots: C,
 }
 
 /// Sets the value of one or more local variables.
@@ -38,13 +39,13 @@ pub struct GetValues {
 /// signature without access to the local variable table information.)
 #[jdwp_command((), 16, 2)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct SetValues {
+pub struct SetValues<'a> {
     /// The frame's thread.
     pub thread_id: ThreadID,
     /// The frame ID.
     pub frame_id: FrameID,
     /// Local variable indices and values to set.
-    pub slots: Vec<(u32, Value)>,
+    pub slots: &'a [(u32, Value)],
 }
 
 /// Returns the value of the 'this' reference for this frame.

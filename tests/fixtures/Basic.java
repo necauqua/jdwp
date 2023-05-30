@@ -4,6 +4,7 @@ import java.util.function.IntSupplier;
 class Basic implements IntSupplier {
 
     static int staticInt = 42;
+    public static Basic running = new Basic();
     public static Basic secondInstance = new Basic();
 
     public long ticks = 0;
@@ -32,7 +33,7 @@ class Basic implements IntSupplier {
         while (true) {
             tick();
             try {
-                Thread.sleep(50L);
+                Thread.sleep(500L);
             } catch (InterruptedException e) {
                 break;
             }
@@ -41,7 +42,7 @@ class Basic implements IntSupplier {
     }
 
     public static void main(String[] args) throws Exception {
-        System.exit(new Basic().getAsInt());
+        System.exit(running.getAsInt());
     }
 
     private static void ping(Object ignored) {

@@ -9,7 +9,7 @@ use jdwp::{
             ClassFileVersion, ClassLoader, ClassObject, ConstantPool, Fields, GetValues, Instances,
             Interfaces, Methods, Modifiers, NestedTypes, Signature, SourceFile, Status,
         },
-        virtual_machine::ClassesBySignature,
+        virtual_machine::ClassBySignature,
         Command,
     },
     jvm::{ConstantPoolItem, ConstantPoolValue, FieldModifiers},
@@ -37,7 +37,7 @@ where
     signatures
         .iter()
         .map(|item| {
-            let id = client.send(ClassesBySignature::new(*item))?[0].type_id;
+            let id = client.send(ClassBySignature::new(*item))?.type_id;
             Ok(client.send(new(*id))?)
         })
         .collect()
@@ -140,7 +140,7 @@ fn modifiers() -> Result {
 fn fields() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
 
     let mut fields = client.send(Fields::new(*id))?;
     fields.sort_by_key(|f| f.name.clone());
@@ -189,7 +189,7 @@ fn fields() -> Result {
 fn methods() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
 
     let mut methods = client.send(Methods::new(*id))?;
     methods.sort_by_key(|f| f.name.clone());
@@ -254,7 +254,7 @@ fn methods() -> Result {
 fn get_values() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
 
     let mut fields = client.send(Fields::new(*id))?;
     fields.sort_by_key(|f| f.name.clone());
@@ -302,7 +302,7 @@ fn source_file() -> Result {
     ]
     "###);
 
-    let id = client.send(ClassesBySignature::new(ARRAY_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(ARRAY_CLS))?.type_id;
     let array_source_file = client.send(SourceFile::new(*id));
 
     assert_snapshot!(array_source_file, @r###"
@@ -320,7 +320,7 @@ fn source_file() -> Result {
 fn nested_types() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
 
     let mut nested_types = client.send(NestedTypes::new(*id))?;
     nested_types.sort_by_key(|t| t.tag() as u8);
@@ -334,7 +334,9 @@ fn nested_types() -> Result {
     ]
     "###);
 
-    let id = client.send(ClassesBySignature::new("Ljava/util/HashMap;"))?[0].type_id;
+    let id = client
+        .send(ClassBySignature::new("Ljava/util/HashMap;"))?
+        .type_id;
     let mut nested_types = client.send(NestedTypes::new(*id))?;
     nested_types.sort_by_key(|t| t.tag() as u8);
 
@@ -392,7 +394,7 @@ fn status() -> Result {
 fn interfaces() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
     let interfaces = client.send(Interfaces::new(*id))?;
     let interfaces = get_signatures(&mut client, interfaces)?;
 
@@ -402,7 +404,9 @@ fn interfaces() -> Result {
     ]
     "###);
 
-    let id = client.send(ClassesBySignature::new("Ljava/util/ArrayList;"))?[0].type_id;
+    let id = client
+        .send(ClassBySignature::new("Ljava/util/ArrayList;"))?
+        .type_id;
     let interfaces = client.send(Interfaces::new(*id))?;
     let interfaces = get_signatures(&mut client, interfaces)?;
 
@@ -422,7 +426,7 @@ fn interfaces() -> Result {
 fn class_object() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
     let class_object = client.send(ClassObject::new(*id))?;
     let ref_id = client.send(ReflectedType::new(class_object))?;
 
@@ -435,7 +439,7 @@ fn class_object() -> Result {
 fn instances() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
     let instances = client.send(Instances::new(*id, 10))?;
 
     // the running instance and the one in the static field
@@ -457,7 +461,7 @@ fn instances() -> Result {
 fn class_file_version() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
     let version = client.send(ClassFileVersion::new(*id))?;
 
     let expected = match common::java_version() {
@@ -480,7 +484,7 @@ fn class_file_version() -> Result {
 fn constant_pool() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new(OUR_CLS))?[0].type_id;
+    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
     let constant_pool = client.send(ConstantPool::new(*id))?;
     let mut reader = Cursor::new(constant_pool.bytes);
 
@@ -527,7 +531,7 @@ fn constant_pool() -> Result {
         "Fieldref(Ref { class: \"Basic\", name: \"ticks\", descriptor: \"J\" })",
         "Fieldref(Ref { class: \"Basic\", name: \"unused\", descriptor: \"Ljava/lang/String;\" })",
         "Fieldref(Ref { class: \"java/lang/System\", name: \"out\", descriptor: \"Ljava/io/PrintStream;\" })",
-        "Long(50)",
+        "Long(500)",
         "Methodref(Ref { class: \"Basic\", name: \"<init>\", descriptor: \"()V\" })",
         "Methodref(Ref { class: \"Basic\", name: \"getAsInt\", descriptor: \"()I\" })",
         "Methodref(Ref { class: \"Basic\", name: \"ping\", descriptor: \"(Ljava/lang/Object;)V\" })",

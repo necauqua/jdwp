@@ -1,10 +1,24 @@
 use proc_macro::TokenStream;
-use quote::quote;
+
+use quote::{quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
+    punctuated::Punctuated,
     spanned::Spanned,
-    Data, Error, Fields, Index, ItemStruct, LitInt, PathArguments, Token, Type,
+    token::Comma,
+    Data, Error, Fields, GenericParam, Index, LitInt, Token, Type,
 };
+
+fn get_generic_names(generic_params: &Punctuated<GenericParam, Comma>) -> proc_macro2::TokenStream {
+    use GenericParam::*;
+
+    let generics = generic_params.iter().map(|param| match param {
+        Type(type_param) => type_param.ident.to_token_stream(),
+        Lifetime(lifetime_def) => lifetime_def.lifetime.to_token_stream(),
+        Const(const_param) => const_param.ident.to_token_stream(),
+    });
+    quote!(#(#generics,)*)
+}
 
 #[proc_macro_derive(JdwpReadable, attributes(skip))]
 pub fn jdwp_readable(item: TokenStream) -> TokenStream {
@@ -14,6 +28,7 @@ pub fn jdwp_readable(item: TokenStream) -> TokenStream {
         Data::Struct(struct_data) => {
             let ident = derive_input.ident;
             let generic_params = derive_input.generics.params;
+            let generic_names = get_generic_names(&generic_params);
             let generics_where = derive_input.generics.where_clause;
             let read = match &struct_data.fields {
                 Fields::Unit => quote!(Ok(Self)),
@@ -31,7 +46,7 @@ pub fn jdwp_readable(item: TokenStream) -> TokenStream {
                 }
             };
             let tokens = quote! {
-                impl<#generic_params> ::jdwp::codec::JdwpReadable for #ident<#generic_params> #generics_where {
+                impl<#generic_params> ::jdwp::codec::JdwpReadable for #ident<#generic_names> #generics_where {
                     fn read<R: ::std::io::Read>(read: &mut ::jdwp::codec::JdwpReader<R>) -> ::std::io::Result<Self> {
                         #read
                     }
@@ -39,12 +54,61 @@ pub fn jdwp_readable(item: TokenStream) -> TokenStream {
             };
             tokens.into()
         }
-        Data::Enum(enum_data) => Error::new(
-            enum_data.enum_token.span,
-            "Can derive JdwpReadable only for structs",
-        )
-        .to_compile_error()
-        .into(),
+        Data::Enum(enum_data) => {
+            let fields = enum_data
+                .variants
+                .iter()
+                .map(|variant| match variant.fields {
+                    Fields::Unnamed(ref fields) if fields.unnamed.len() == 1 => {
+                        Some((&variant.ident, &fields.unnamed[0].ty))
+                    }
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>();
+
+            if let Some(fields) = fields {
+                let ident = derive_input.ident;
+
+                let mut locals = Vec::with_capacity(fields.len());
+                let mut match_arms = Vec::with_capacity(fields.len());
+
+                for (i, (variant, ty)) in fields.iter().enumerate() {
+                    locals.push(quote! {
+                        <::core::option::Option::<#ty> as ::jdwp::codec::JdwpReadable>::read(read)?
+                    });
+                    let mut match_arm = Vec::with_capacity(fields.len());
+                    for j in 0..fields.len() {
+                        match_arm.push(if j == i {
+                            quote!(::core::option::Option::Some(matched))
+                        } else {
+                            quote!(::core::option::Option::None)
+                        })
+                    }
+                    match_arms.push(quote! {
+                        (#(#match_arm),*) => ::std::result::Result::Ok(#ident::#variant(matched))
+                    });
+                }
+
+                let tokens = quote! {
+                    impl ::jdwp::codec::JdwpReadable for #ident {
+                        fn read<R: ::std::io::Read>(read: &mut ::jdwp::codec::JdwpReader<R>) -> ::std::io::Result<Self> {
+                            match (#(#locals),*) {
+                                #(#match_arms,)*
+                                _ => ::std::result::Result::Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "Multiple values in response")),
+                            }
+                        }
+                    }
+                };
+                tokens.into()
+            } else {
+                Error::new(
+                        enum_data.enum_token.span,
+                        "Can derive JdwpReadable only for enums with all variants having a single unnamed field",
+                    )
+                    .to_compile_error()
+                    .into()
+            }
+        }
         Data::Union(union_data) => Error::new(
             union_data.union_token.span,
             "Can derive JdwpReadable only for structs",
@@ -62,7 +126,9 @@ pub fn jdwp_writable(item: TokenStream) -> TokenStream {
         Data::Struct(struct_data) => {
             let ident = derive_input.ident;
             let generic_params = derive_input.generics.params;
+            let generic_names = get_generic_names(&generic_params);
             let generics_where = derive_input.generics.where_clause;
+
             let write = match &struct_data.fields {
                 Fields::Unit => quote!(),
                 Fields::Named(named) => {
@@ -81,7 +147,7 @@ pub fn jdwp_writable(item: TokenStream) -> TokenStream {
                 }
             };
             let tokens = quote! {
-                impl<#generic_params> ::jdwp::codec::JdwpWritable for #ident<#generic_params> #generics_where {
+                impl<#generic_params> ::jdwp::codec::JdwpWritable for #ident<#generic_names> #generics_where {
                     fn write<W: ::std::io::Write>(&self, write: &mut ::jdwp::codec::JdwpWriter<W>) -> ::std::io::Result<()> {
                         #write
                         Ok(())
@@ -166,10 +232,14 @@ pub fn jdwp_command(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let ident = &item.ident;
+    let generic_params = &item.generics.params;
+    let generic_names = get_generic_names(generic_params);
+    let generics_where = &item.generics.where_clause;
 
     let new = if item.fields.is_empty() {
         quote!()
     } else {
+        let mut docs = Vec::with_capacity(item.fields.len());
         let mut typed_idents = Vec::with_capacity(item.fields.len());
         let mut idents = Vec::with_capacity(item.fields.len());
         for f in &item.fields {
@@ -178,15 +248,32 @@ pub fn jdwp_command(attr: TokenStream, item: TokenStream) -> TokenStream {
                     let ty = &f.ty;
 
                     // this is very cringe but also very simple
-                    let string_magic = quote!(#ty).to_string() == "String";
+                    let stype = quote!(#ty).to_string();
+                    let string_magic = stype == "String";
+                    let phantom = stype.starts_with("PhantomData ");
 
-                    typed_idents.push(if string_magic {
-                        quote!(#ident: impl Into<String>)
-                    } else {
-                        quote!(#ident: #ty)
-                    });
+                    if !phantom {
+                        typed_idents.push(if string_magic {
+                            quote!(#ident: impl Into<String>)
+                        } else {
+                            quote!(#ident: #ty)
+                        });
+                    }
+
+                    docs.push(f.attrs.iter().find(|a| a.path.is_ident("doc")).map(|a| {
+                        let tokens = &a.tokens;
+                        quote! {
+                            #[doc = stringify!(#ident)]
+                            #[doc = " - "]
+                            #[doc #tokens]
+                            #[doc = "\n"]
+                        }
+                    }));
+
                     idents.push(if string_magic {
                         quote!(#ident: #ident.into())
+                    } else if phantom {
+                        quote!(#ident: ::std::marker::PhantomData)
                     } else {
                         quote!(#ident)
                     });
@@ -198,59 +285,26 @@ pub fn jdwp_command(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             }
         }
-        let of = try_generate_of_constructor(&item);
         quote! {
-            impl #ident {
+            impl<#generic_params> #ident<#generic_names> #generics_where {
                 /// Autogenerated constructor to create the command
+                /// ### Arguments:
+                #(#docs)*
                 pub fn new(#(#typed_idents,)*) -> Self {
                     Self { #(#idents,)* }
                 }
-                #of
             }
         }
     };
 
     let tokens = quote! {
         #item
-
         #new
 
-        impl ::jdwp::commands::Command for #ident {
+        impl<#generic_params> ::jdwp::commands::Command for #ident<#generic_names> #generics_where {
             const ID: ::jdwp::CommandId = ::jdwp::CommandId::new(#command_set, #command_id);
             type Output = #reply_type;
         }
     };
     tokens.into()
-}
-
-fn try_generate_of_constructor(item: &ItemStruct) -> proc_macro2::TokenStream {
-    let field = &match item.fields {
-        Fields::Named(ref named) => &named.named[0],
-        Fields::Unnamed(ref unnamed) => &unnamed.unnamed[0],
-        _ => unreachable!(),
-    };
-
-    match &field.ty {
-        Type::Path(tp) => {
-            if tp.path.segments.len() == 1 {
-                let first = &tp.path.segments[0];
-                let vec = &first.ident;
-                if vec.to_string() == "Vec" {
-                    if let PathArguments::AngleBracketed(args) = &first.arguments {
-                        let f_ident = &field.ident;
-                        let tpe = &args.args[0];
-                        return quote! {
-                            /// Autogenerated shortcut to create a command with a single value in the list
-                            pub fn of(single: #tpe) -> Self {
-                                Self { #f_ident: vec![single] }
-                            }
-                        };
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
-
-    quote!()
 }

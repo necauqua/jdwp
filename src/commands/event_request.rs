@@ -19,7 +19,7 @@ use crate::{
 /// [Composite](super::event::Composite) command for further details.
 #[jdwp_command(RequestID, 15, 1)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct Set {
+pub struct Set<'a> {
     /// Event kind to request. Some events may require a capability in order to
     /// be requested.
     event_kind: EventKind,
@@ -45,7 +45,7 @@ pub struct Set {
     ///
     /// Filtering can improve debugger performance dramatically by reducing the
     /// amount of event traffic sent from the target VM to the debugger VM.
-    modifiers: Vec<Modifier>,
+    modifiers: &'a [Modifier],
 }
 
 /// Clear an event request.

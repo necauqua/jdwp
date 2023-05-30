@@ -1,8 +1,9 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 
 use crate::{
     codec::{JdwpReadable, JdwpWritable},
     enums::ClassStatus,
+    functional::{Coll, Single},
     types::{ObjectID, ReferenceTypeID, StringID, TaggedReferenceTypeID, ThreadGroupID, ThreadID},
 };
 
@@ -37,12 +38,24 @@ pub struct VersionReply {
 ///
 /// The search is confined to loaded classes only; no attempt is made to load a
 /// class of the given signature.
-#[jdwp_command(Vec<UnnamedClass>, 1, 2)]
+#[jdwp_command(C, 1, 2)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct ClassesBySignature {
+pub struct ClassesBySignatureGeneric<C: Coll<Item = UnnamedClass>> {
     /// JNI signature of the class to find (for example, "Ljava/lang/String;")
     signature: String,
+    _phantom: PhantomData<C>,
 }
+
+/// This is needed because inference cannot guess what you need since there are
+/// no parameters
+/// And the Single helper type is in a private jdwp module
+pub type ClassBySignature = ClassesBySignatureGeneric<Single<UnnamedClass>>;
+
+/// The inference is able to figure out N by the destructuring pattern
+pub type ClassesBySignatureStatic<const N: usize> = ClassesBySignatureGeneric<[UnnamedClass; N]>;
+
+/// The 'standard' variant with a vector
+pub type ClassesBySignature = ClassesBySignatureGeneric<Vec<UnnamedClass>>;
 
 #[derive(Debug, JdwpReadable)]
 pub struct UnnamedClass {
@@ -260,8 +273,8 @@ pub struct ClassPathsReply {
 /// implementation which operates equivalently.
 #[jdwp_command((), 1, 14)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct DisposeObjects {
-    requests: Vec<(ObjectID, u32)>,
+pub struct DisposeObjects<'a> {
+    requests: &'a [(ObjectID, u32)],
 }
 
 /// Tells the target VM to stop sending events. Events are not discarded; they
@@ -422,8 +435,8 @@ impl Debug for CapabilitiesNewReply {
 /// arbitrary ways.
 #[jdwp_command((), 1, 18)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct RedefineClasses {
-    classes: Vec<(ReferenceTypeID, Vec<u8>)>,
+pub struct RedefineClasses<'a> {
+    classes: &'a [(ReferenceTypeID, Vec<u8>)],
 }
 
 /// Set the default stratum. Requires `can_set_default_stratum` capability -
@@ -471,9 +484,9 @@ pub struct GenericClass {
 ///
 /// Since JDWP version 1.6. Requires canGetInstanceInfo capability - see
 /// [CapabilitiesNew].
-#[jdwp_command(Vec<u64>, 1, 21)]
+#[jdwp_command(C::Map<u64>, 1, 21)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct InstanceCounts {
+pub struct InstanceCounts<C: Coll<Item = ReferenceTypeID>> {
     /// A list of reference type IDs.
-    ref_types: Vec<ReferenceTypeID>,
+    ref_types: C,
 }

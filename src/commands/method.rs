@@ -33,7 +33,7 @@ pub struct LineTableReply {
     /// Highest valid code index for the method, >=0, or -1 if the method is
     /// native
     pub end: i64,
-    /// The number of entries in the line table for this method.
+    /// The entries of the line table for this method.
     pub lines: Vec<Line>,
 }
 

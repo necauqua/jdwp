@@ -322,7 +322,7 @@ impl JdwpWritable for UntaggedValue {
     }
 }
 
-macro_rules! tagged_io {
+macro_rules! tagged_enum {
     ($enum:ident <-> $tag:ident, $($tpe:ident),* { $($read_extras:tt)* } { $($write_extras:tt)* }) => {
         impl JdwpReadable for $enum {
             fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
@@ -345,9 +345,10 @@ macro_rules! tagged_io {
             }
         }
     };
+    ($($tt:tt)*) => { tagged_enum!($($tt)* {} {}); }
 }
 
-tagged_io! {
+tagged_enum! {
     Value <-> Tag,
     Byte, Boolean, Char, Int, Short, Long, Float, Double, Object
     {
@@ -411,7 +412,7 @@ impl Deref for TaggedObjectID {
     }
 }
 
-tagged_io! {
+tagged_enum! {
     TaggedObjectID <-> Tag,
     Array, Object, String, Thread, ThreadGroup, ClassLoader, ClassObject
     { _ => Err(io::Error::from(io::ErrorKind::InvalidData)) }
@@ -479,7 +480,7 @@ impl ArrayRegion {
     }
 }
 
-tagged_io! {
+tagged_enum! {
     ArrayRegion <-> Tag,
     Byte, Boolean, Char, Short, Int, Long, Float, Double, Object
     { _ => Err(io::Error::from(io::ErrorKind::InvalidData)) }
@@ -530,10 +531,9 @@ impl Deref for TaggedReferenceTypeID {
     }
 }
 
-tagged_io! {
+tagged_enum! {
     TaggedReferenceTypeID <-> TypeTag,
     Class, Interface, Array
-    {} {}
 }
 
 /// An executable location.
@@ -571,10 +571,10 @@ macro_rules! optional_impl {
         $(
             impl JdwpReadable for Option<$tpe> {
                 fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-                    if read.peek_u8()? != 0 {
+                    if read.peek_tag_byte()? != 0 {
                         JdwpReadable::read(read).map(Some)
                     } else {
-                        read.read_u8()?; // consume it
+                        read.read_tag_byte()?; // consume it
                         Ok(None)
                     }
                 }
@@ -829,33 +829,16 @@ pub enum Modifier {
     SourceNameMatch(SourceNameMatch),
 }
 
-tagged_io! {
+tagged_enum! {
     Modifier <-> ModifierKind,
     Count, Conditional, ThreadOnly, ClassOnly, ClassMatch, ClassExclude, LocationOnly, ExceptionOnly, FieldOnly, Step, InstanceOnly, SourceNameMatch
-    {} {}
 }
 
 /// A response from 3 types of invoke method commands: virtual, static and
 /// interface static. The response is either a value or an exception - we model
-/// it with a enum with a custom read implementation for better ergonomics.
-#[derive(Debug)]
+/// it with a enum for better ergonomics.
+#[derive(Debug, JdwpReadable)]
 pub enum InvokeMethodReply {
     Value(Value),
     Exception(TaggedObjectID),
-}
-
-impl JdwpReadable for InvokeMethodReply {
-    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-        let new_object = Option::<Value>::read(read)?;
-        let exception = Option::<TaggedObjectID>::read(read)?;
-
-        match (new_object, exception) {
-            (Some(new_object), None) => Ok(InvokeMethodReply::Value(new_object)),
-            (None, Some(exception)) => Ok(InvokeMethodReply::Exception(exception)),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid InvokeMethod reply",
-            )),
-        }
-    }
 }

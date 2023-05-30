@@ -70,7 +70,7 @@ fn suspend_resume_status_and_count() -> Result {
     let status = client.send(Status::new(main))?;
     assert_snapshot!(status, @r###"
     (
-        Running,
+        Sleeping,
         Suspended,
     )
     "###);

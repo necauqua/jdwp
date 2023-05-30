@@ -4,6 +4,7 @@ use super::jdwp_command;
 use crate::{
     codec::{JdwpReadable, JdwpWritable},
     enums::ClassStatus,
+    functional::Coll,
     jvm::{FieldModifiers, MethodModifiers, TypeModifiers},
     types::{
         ClassLoaderID, ClassObjectID, FieldID, InterfaceID, MethodID, ReferenceTypeID,
@@ -125,11 +126,13 @@ pub struct Method {
 ///
 /// Access control is not enforced; for example, the values of private fields
 /// can be obtained.
-#[jdwp_command(Vec<Value>, 2, 6)]
+#[jdwp_command(C::Map<Value>, 2, 6)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct GetValues {
+pub struct GetValues<C: Coll<Item = FieldID>> {
+    /// The reference type ID
     pub ref_type: ReferenceTypeID,
-    pub fields: Vec<FieldID>,
+    /// Field IDs of fields to get
+    pub fields: C,
 }
 
 /// Returns the source file name in which a reference type was declared.
@@ -360,7 +363,7 @@ pub struct ConstantPoolReply {
     /// This corresponds to the constant_pool_count item of the Class File
     /// Format in The Java™ Virtual Machine Specification.
     pub count: u32,
-    /// Raw bytes of constant pool
+    /// Raw bytes of the constant pool
     pub bytes: Vec<u8>,
 }
 

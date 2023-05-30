@@ -1,4 +1,5 @@
 use jdwp_macros::JdwpReadable;
+use std::ops::Deref;
 
 use super::jdwp_command;
 
@@ -24,4 +25,12 @@ pub struct NewInstanceReply {
     _tag: Tag,
     /// The newly created array object
     pub new_array: ArrayID,
+}
+
+impl Deref for NewInstanceReply {
+    type Target = ArrayID;
+
+    fn deref(&self) -> &Self::Target {
+        &self.new_array
+    }
 }

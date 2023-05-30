@@ -53,7 +53,7 @@ use crate::{
 // [Dispose](super::virtual_machine::Dispose) command) the method invocation continues.
 #[jdwp_command(5, 1)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct InvokeMethod {
+pub struct InvokeMethod<'a> {
     /// The interface type ID
     interface_id: InterfaceID,
     /// The thread in which to invoke
@@ -61,7 +61,7 @@ pub struct InvokeMethod {
     /// The method to invoke
     method_id: MethodID,
     /// The argument values
-    arguments: Vec<Value>,
+    arguments: &'a [Value],
     /// Invocation options
     options: InvokeOptions,
 }

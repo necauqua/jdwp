@@ -39,11 +39,11 @@ pub struct GetValues {
 /// be loaded.
 #[jdwp_command((), 13, 3)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct SetValues {
+pub struct SetValues<'a> {
     /// The array object ID
     array_id: ArrayID,
     /// The first index to set
     first_index: i32,
     /// Values to set
-    values: Vec<UntaggedValue>,
+    values: &'a [UntaggedValue],
 }

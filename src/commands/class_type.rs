@@ -1,8 +1,6 @@
-use std::io::{self, Read};
-
 use jdwp_macros::jdwp_command;
 
-use crate::{codec::JdwpReader, enums::InvokeOptions, types::*};
+use crate::{enums::InvokeOptions, types::*};
 
 use super::{JdwpReadable, JdwpWritable};
 
@@ -32,11 +30,11 @@ pub struct Superclass {
 /// value's type to thefield's type and the field's type must be loaded.
 #[jdwp_command((), 3, 2)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct SetValues {
+pub struct SetValues<'a> {
     /// The class type ID.
     class_id: ClassID,
     /// Fields to set and their values.
-    values: Vec<(FieldID, UntaggedValue)>,
+    values: &'a [(FieldID, UntaggedValue)],
 }
 
 /// Invokes a static method. The method must be member of the class type or one
@@ -89,7 +87,7 @@ pub struct SetValues {
 
 #[jdwp_command(3, 3)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct InvokeMethod {
+pub struct InvokeMethod<'a> {
     /// The class type ID.
     class_id: ClassID,
     /// The thread in which to invoke.
@@ -97,14 +95,14 @@ pub struct InvokeMethod {
     /// The method to invoke.
     method_id: MethodID,
     /// Arguments to the method.
-    arguments: Vec<Value>,
+    arguments: &'a [Value],
     // Invocation options
     options: InvokeOptions,
 }
 
 #[jdwp_command(3, 4)]
 #[derive(Debug, Clone, JdwpWritable)]
-pub struct NewInstance {
+pub struct NewInstance<'a> {
     /// The class type ID.
     class_id: ClassID,
     /// The thread in which to invoke the constructor.
@@ -112,12 +110,12 @@ pub struct NewInstance {
     /// The constructor to invoke.
     method_id: MethodID,
     /// Arguments for the constructor method.
-    arguments: Vec<Value>,
+    arguments: &'a [Value],
     // Constructor invocation options
     options: InvokeOptions,
 }
 
-#[derive(Debug)]
+#[derive(Debug, JdwpReadable)]
 pub enum NewInstanceReply {
     /// The newly created object.
     NewObject(TaggedObjectID),
@@ -125,19 +123,19 @@ pub enum NewInstanceReply {
     Exception(TaggedObjectID),
 }
 
-// better types everyone
-impl JdwpReadable for NewInstanceReply {
-    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-        let new_object = Option::<TaggedObjectID>::read(read)?;
-        let exception = Option::<TaggedObjectID>::read(read)?;
+// // better types everyone
+// impl JdwpReadable for NewInstanceReply {
+//     fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+//         let new_object = Option::<TaggedObjectID>::read(read)?;
+//         let exception = Option::<TaggedObjectID>::read(read)?;
 
-        match (new_object, exception) {
-            (Some(new_object), None) => Ok(NewInstanceReply::NewObject(new_object)),
-            (None, Some(exception)) => Ok(NewInstanceReply::Exception(exception)),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid NewInstance reply",
-            )),
-        }
-    }
-}
+//         match (new_object, exception) {
+//             (Some(new_object), None) =>
+// Ok(NewInstanceReply::NewObject(new_object)),             (None,
+// Some(exception)) => Ok(NewInstanceReply::Exception(exception)),             _
+// => Err(io::Error::new(                 io::ErrorKind::InvalidData,
+//                 "Invalid NewInstance reply",
+//             )),
+//         }
+//     }
+// }

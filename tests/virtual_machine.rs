@@ -37,51 +37,43 @@ fn class_by_signature() -> Result {
 
     let classes = CASES
         .iter()
-        .map(|&signature| Ok(client.send(ClassesBySignature::new(signature))?))
+        .map(|&signature| Ok(client.send(ClassBySignature::new(signature))?.0))
         .collect::<Result<Vec<_>>>()?;
 
     assert_snapshot!(classes, @r###"
     [
-        [
-            UnnamedClass {
-                type_id: Class(
-                    [opaque_id],
-                ),
-                status: ClassStatus(
-                    VERIFIED | PREPARED | INITIALIZED,
-                ),
-            },
-        ],
-        [
-            UnnamedClass {
-                type_id: Interface(
-                    [opaque_id],
-                ),
-                status: ClassStatus(
-                    VERIFIED | PREPARED | INITIALIZED,
-                ),
-            },
-        ],
-        [
-            UnnamedClass {
-                type_id: Array(
-                    [opaque_id],
-                ),
-                status: ClassStatus(
-                    0x0,
-                ),
-            },
-        ],
-        [
-            UnnamedClass {
-                type_id: Array(
-                    [opaque_id],
-                ),
-                status: ClassStatus(
-                    0x0,
-                ),
-            },
-        ],
+        UnnamedClass {
+            type_id: Class(
+                [opaque_id],
+            ),
+            status: ClassStatus(
+                VERIFIED | PREPARED | INITIALIZED,
+            ),
+        },
+        UnnamedClass {
+            type_id: Interface(
+                [opaque_id],
+            ),
+            status: ClassStatus(
+                VERIFIED | PREPARED | INITIALIZED,
+            ),
+        },
+        UnnamedClass {
+            type_id: Array(
+                [opaque_id],
+            ),
+            status: ClassStatus(
+                0x0,
+            ),
+        },
+        UnnamedClass {
+            type_id: Array(
+                [opaque_id],
+            ),
+            status: ClassStatus(
+                0x0,
+            ),
+        },
     ]
     "###);
 
@@ -346,8 +338,10 @@ fn set_default_stratum() -> Result {
 fn instance_counts() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassesBySignature::new("LBasic;"))?[0].type_id;
-    let id2 = client.send(ClassesBySignature::new("LBasic$NestedClass;"))?[0].type_id;
+    let id = client.send(ClassBySignature::new("LBasic;"))?.type_id;
+    let id2 = client
+        .send(ClassBySignature::new("LBasic$NestedClass;"))?
+        .type_id;
 
     let counts = client.send(InstanceCounts::new(vec![*id, *id2]))?;
 

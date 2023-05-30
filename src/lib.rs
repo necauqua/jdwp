@@ -21,6 +21,7 @@ pub mod enums;
 pub mod jvm;
 pub mod types;
 
+mod functional;
 mod xorshift;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, JdwpReadable, JdwpWritable)]

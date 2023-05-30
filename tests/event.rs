@@ -1,6 +1,6 @@
 use jdwp::{
     commands::{
-        event::Event, event_request, reference_type::Fields, virtual_machine::ClassesBySignature,
+        event::Event, event_request, reference_type::Fields, virtual_machine::ClassBySignature,
     },
     enums::{EventKind, SuspendPolicy},
     types::{FieldOnly, Modifier, Value},
@@ -14,7 +14,7 @@ use common::Result;
 fn field_modification() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let type_id = client.send(ClassesBySignature::new("LBasic;"))?[0].type_id;
+    let type_id = client.send(ClassBySignature::new("LBasic;"))?.type_id;
 
     let ticks = &client
         .send(Fields::new(*type_id))?
@@ -22,13 +22,15 @@ fn field_modification() -> Result {
         .find(|f| f.name == "ticks")
         .unwrap();
 
+    let field_only = Modifier::FieldOnly(FieldOnly {
+        declaring: *type_id,
+        field_id: ticks.field_id,
+    });
+
     let request_id = client.send(event_request::Set::new(
         EventKind::FieldModification,
         SuspendPolicy::None,
-        vec![Modifier::FieldOnly(FieldOnly {
-            declaring: *type_id,
-            field_id: ticks.field_id,
-        })],
+        &[field_only],
     ))?;
 
     match &client.host_events().recv()?.events[..] {
