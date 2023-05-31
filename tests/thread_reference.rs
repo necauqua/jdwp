@@ -173,7 +173,7 @@ fn frames() -> Result {
             "LBasic;",
             "main",
             "([Ljava/lang/String;)V",
-            7,
+            3,
         ),
     ]
     "###);

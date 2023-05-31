@@ -149,6 +149,14 @@ fn fields() -> Result {
     [
         Field {
             field_id: [opaque_id],
+            name: "running",
+            signature: "LBasic;",
+            mod_bits: FieldModifiers(
+                PUBLIC | STATIC,
+            ),
+        },
+        Field {
+            field_id: [opaque_id],
             name: "secondInstance",
             signature: "LBasic;",
             mod_bits: FieldModifiers(
@@ -272,6 +280,9 @@ fn get_values() -> Result {
 
     assert_snapshot!(values, @r###"
     [
+        Object(
+            [opaque_id],
+        ),
         Object(
             [opaque_id],
         ),
@@ -526,6 +537,7 @@ fn constant_pool() -> Result {
         "Class(\"java/lang/Thread\")",
         "Class(\"java/util/HashMap\")",
         "Class(\"java/util/function/IntSupplier\")",
+        "Fieldref(Ref { class: \"Basic\", name: \"running\", descriptor: \"LBasic;\" })",
         "Fieldref(Ref { class: \"Basic\", name: \"secondInstance\", descriptor: \"LBasic;\" })",
         "Fieldref(Ref { class: \"Basic\", name: \"staticInt\", descriptor: \"I\" })",
         "Fieldref(Ref { class: \"Basic\", name: \"ticks\", descriptor: \"J\" })",
@@ -554,6 +566,7 @@ fn constant_pool() -> Result {
         "NameAndType(NameAndType { name: \"out\", descriptor: \"Ljava/io/PrintStream;\" })",
         "NameAndType(NameAndType { name: \"ping\", descriptor: \"(Ljava/lang/Object;)V\" })",
         "NameAndType(NameAndType { name: \"println\", descriptor: \"(Ljava/lang/String;)V\" })",
+        "NameAndType(NameAndType { name: \"running\", descriptor: \"LBasic;\" })",
         "NameAndType(NameAndType { name: \"secondInstance\", descriptor: \"LBasic;\" })",
         "NameAndType(NameAndType { name: \"sleep\", descriptor: \"(J)V\" })",
         "NameAndType(NameAndType { name: \"staticInt\", descriptor: \"I\" })",
@@ -615,6 +628,7 @@ fn constant_pool() -> Result {
         "Utf8(\"out\")",
         "Utf8(\"ping\")",
         "Utf8(\"println\")",
+        "Utf8(\"running\")",
         "Utf8(\"secondInstance\")",
         "Utf8(\"sleep\")",
         "Utf8(\"staticInt\")",
