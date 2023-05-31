@@ -1,9 +1,8 @@
-use std::{assert_eq, fmt::Debug};
+use std::assert_eq;
 
 use common::Result;
 use jdwp::{
     client::JdwpClient,
-    codec::{JdwpReadable, JdwpWritable},
     commands::{
         reference_type::{Methods, Signature},
         thread_group_reference,
@@ -13,7 +12,6 @@ use jdwp::{
             ThreadGroup,
         },
         virtual_machine::AllThreads,
-        Command,
     },
     types::{TaggedReferenceTypeID, ThreadID, Value},
 };
@@ -32,28 +30,22 @@ fn get_main_thread(client: &mut JdwpClient) -> Result<ThreadID> {
         .0)
 }
 
-fn test_host_not_suspended<C: Command>(
-    client: &mut JdwpClient,
-    thread: ThreadID,
-    command: C,
-) -> Result<C::Output>
-where
-    C: Command + JdwpWritable + Clone + Debug,
-    C::Output: JdwpReadable + Debug,
-{
-    let result = client.send(command.clone());
+// a macro so that same assert_snapshot is not called from multiple places as
+// insta seems to hate that
+macro_rules! check_host_suspended {
+    ($client:expr, $thread:expr, $command:expr) => {{
+        let result = $client.send($command);
+        assert_snapshot!(result, @r###"
+        Err(
+            HostError(
+                ThreadNotSuspended,
+            ),
+        )
+        "###);
 
-    assert_snapshot!(result, @r###"
-    Err(
-        HostError(
-            ThreadNotSuspended,
-        ),
-    )
-    "###);
-
-    client.send(Suspend::new(thread))?;
-
-    Ok(client.send(command)?)
+        $client.send(Suspend::new($thread))
+            .and_then(|_| $client.send($command))
+    }};
 }
 
 #[test]
@@ -116,11 +108,7 @@ fn frames() -> Result {
     let mut client = common::launch_and_attach("basic")?;
     let main = get_main_thread(&mut client)?;
 
-    let frames = test_host_not_suspended(
-        &mut client,
-        main,
-        Frames::new(main, 0, FrameLimit::Limit(3)),
-    )?;
+    let frames = check_host_suspended!(client, main, Frames::new(main, 0, FrameLimit::Limit(3)))?;
 
     let mut frame_info = vec![];
 
@@ -186,7 +174,7 @@ fn frame_count() -> Result {
     let mut client = common::launch_and_attach("basic").unwrap();
     let main = get_main_thread(&mut client).unwrap();
 
-    let frame_count = test_host_not_suspended(&mut client, main, FrameCount::new(main))?;
+    let frame_count = check_host_suspended!(client, main, FrameCount::new(main))?;
 
     assert_eq!(frame_count, 3);
 
@@ -199,7 +187,7 @@ fn owned_monitors() -> Result {
     let mut client = common::launch_and_attach("basic")?;
     let main = get_main_thread(&mut client)?;
 
-    let owned_monitors = test_host_not_suspended(&mut client, main, OwnedMonitors::new(main))?;
+    let owned_monitors = check_host_suspended!(client, main, OwnedMonitors::new(main))?;
 
     assert_snapshot!(owned_monitors, @"[]");
 
@@ -212,7 +200,7 @@ fn current_contended_monitor() -> Result {
     let main = get_main_thread(&mut client)?;
 
     let current_contended_monitor =
-        test_host_not_suspended(&mut client, main, CurrentContendedMonitor::new(main))?;
+        check_host_suspended!(client, main, CurrentContendedMonitor::new(main))?;
 
     assert_snapshot!(current_contended_monitor, @r###"
     Some(
@@ -231,7 +219,7 @@ fn owned_monitors_stack_depth_info() -> Result {
     let main = get_main_thread(&mut client)?;
 
     let owned_monitors_stack_depth_info =
-        test_host_not_suspended(&mut client, main, OwnedMonitorsStackDepthInfo::new(main))?;
+        check_host_suspended!(client, main, OwnedMonitorsStackDepthInfo::new(main))?;
 
     assert_snapshot!(owned_monitors_stack_depth_info, @"[]");
 
@@ -246,11 +234,8 @@ fn force_early_return() -> Result {
     // we stop at thread.sleep which is a native method
     // todo: make a better test where we stop with an event in a place where we can
     // actually force the return
-    let err = test_host_not_suspended(
-        &mut client,
-        main,
-        ForceEarlyReturn::new(main, Value::Int(42)),
-    );
+    let err = check_host_suspended!(client, main, ForceEarlyReturn::new(main, Value::Int(42)));
+
     assert_snapshot!(err, @r###"
     Err(
         HostError(

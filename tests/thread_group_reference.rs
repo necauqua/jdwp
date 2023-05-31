@@ -35,7 +35,10 @@ fn system_tree_names() -> Result {
         .child_groups
         .iter()
         .map(|id| Ok(client.send(Name::new(*id))?))
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|name| name != "InnocuousThreadGroup") // not present on jdk8
+        .collect::<Vec<_>>();
 
     let thread_names = children
         .child_threads
@@ -57,7 +60,6 @@ fn system_tree_names() -> Result {
         },
         [
             "main",
-            "InnocuousThreadGroup",
         ],
     )
     "###);
