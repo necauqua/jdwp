@@ -28,8 +28,10 @@
             jdk17
             (rust-bin.selectLatestNightlyWith (toolchain: toolchain.rustfmt))
             rust-analyzer
+
             cargo-nextest
             cargo-insta
+            cargo-llvm-cov
           ];
 
           INSTA_TEST_RUNNER = "nextest";

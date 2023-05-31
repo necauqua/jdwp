@@ -39,8 +39,8 @@ pub struct VersionReply {
 /// The search is confined to loaded classes only; no attempt is made to load a
 /// class of the given signature.
 #[jdwp_command(C, 1, 2)]
-#[derive(Debug, Clone, JdwpWritable)]
-pub struct ClassesBySignatureGeneric<C: Coll<Item = UnnamedClass>> {
+#[derive(Clone, JdwpWritable)]
+pub struct ClassesBySignatureGeneric<C: Coll<Item = (TaggedReferenceTypeID, ClassStatus)>> {
     /// JNI signature of the class to find (for example, "Ljava/lang/String;")
     signature: String,
     _phantom: PhantomData<C>,
@@ -49,20 +49,37 @@ pub struct ClassesBySignatureGeneric<C: Coll<Item = UnnamedClass>> {
 /// This is needed because inference cannot guess what you need since there are
 /// no parameters
 /// And the Single helper type is in a private jdwp module
-pub type ClassBySignature = ClassesBySignatureGeneric<Single<UnnamedClass>>;
+pub type ClassBySignature = ClassesBySignatureGeneric<Single<(TaggedReferenceTypeID, ClassStatus)>>;
+
+impl Debug for ClassBySignature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClassBySignature")
+            .field("signature", &self.signature)
+            .finish()
+    }
+}
 
 /// The inference is able to figure out N by the destructuring pattern
-pub type ClassesBySignatureStatic<const N: usize> = ClassesBySignatureGeneric<[UnnamedClass; N]>;
+pub type ClassesBySignatureStatic<const N: usize> =
+    ClassesBySignatureGeneric<[(TaggedReferenceTypeID, ClassStatus); N]>;
+
+impl<const N: usize> Debug for ClassesBySignatureStatic<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(&format!("ClassesBySignatureStatic<{}>", N)) // hope this const-optimizes?.
+            .field("signature", &self.signature)
+            .finish()
+    }
+}
 
 /// The 'standard' variant with a vector
-pub type ClassesBySignature = ClassesBySignatureGeneric<Vec<UnnamedClass>>;
+pub type ClassesBySignature = ClassesBySignatureGeneric<Vec<(TaggedReferenceTypeID, ClassStatus)>>;
 
-#[derive(Debug, JdwpReadable)]
-pub struct UnnamedClass {
-    /// Matching loaded reference type
-    pub type_id: TaggedReferenceTypeID,
-    /// The current class status
-    pub status: ClassStatus,
+impl Debug for ClassesBySignature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClassesBySignature")
+            .field("signature", &self.signature)
+            .finish()
+    }
 }
 
 /// Returns reference types for all classes currently loaded by the target VM.

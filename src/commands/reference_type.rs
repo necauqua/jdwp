@@ -321,8 +321,6 @@ pub struct Instances {
     ref_type: ReferenceTypeID,
     /// Maximum number of instances to return.
     ///
-    /// Must be non-negative.
-    ///
     /// If zero, all instances are returned.
     max_instances: u32,
 }

@@ -3,7 +3,8 @@ use super::jdwp_command;
 use crate::{
     codec::JdwpWritable,
     enums::{EventKind, SuspendPolicy},
-    types::{Modifier, RequestID},
+    event_modifier::Modifier,
+    types::RequestID,
 };
 
 /// Set an event request.
@@ -38,13 +39,13 @@ pub struct Set<'a> {
     /// is placed in the event queue.
     ///
     /// Events are filtered by applying each modifier to an event in the order
-    /// they are specified in this collection Only events that satisfy all
+    /// they are specified in this collection. Only events that satisfy all
     /// modifiers are reported.
     ///
     /// An empty list means there are no modifiers in the request.
     ///
     /// Filtering can improve debugger performance dramatically by reducing the
-    /// amount of event traffic sent from the target VM to the debugger VM.
+    /// amount of event traffic sent from the target VM to the debugger.
     modifiers: &'a [Modifier],
 }
 

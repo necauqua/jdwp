@@ -1,6 +1,8 @@
+use std::io::{self, Read};
+
 use jdwp_macros::jdwp_command;
 
-use crate::{enums::InvokeOptions, types::*};
+use crate::{codec::JdwpReader, enums::InvokeOptions, types::*};
 
 use super::{JdwpReadable, JdwpWritable};
 
@@ -115,7 +117,7 @@ pub struct NewInstance<'a> {
     options: InvokeOptions,
 }
 
-#[derive(Debug, JdwpReadable)]
+#[derive(Debug)]
 pub enum NewInstanceReply {
     /// The newly created object.
     NewObject(TaggedObjectID),
@@ -123,19 +125,16 @@ pub enum NewInstanceReply {
     Exception(TaggedObjectID),
 }
 
-// // better types everyone
-// impl JdwpReadable for NewInstanceReply {
-//     fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-//         let new_object = Option::<TaggedObjectID>::read(read)?;
-//         let exception = Option::<TaggedObjectID>::read(read)?;
+// better types everyone
+impl JdwpReadable for NewInstanceReply {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        let new_object = Option::<TaggedObjectID>::read(read)?;
+        let exception = Option::<TaggedObjectID>::read(read)?;
 
-//         match (new_object, exception) {
-//             (Some(new_object), None) =>
-// Ok(NewInstanceReply::NewObject(new_object)),             (None,
-// Some(exception)) => Ok(NewInstanceReply::Exception(exception)),             _
-// => Err(io::Error::new(                 io::ErrorKind::InvalidData,
-//                 "Invalid NewInstance reply",
-//             )),
-//         }
-//     }
-// }
+        match (new_object, exception) {
+            (Some(new_object), None) => Ok(NewInstanceReply::NewObject(new_object)),
+            (None, Some(exception)) => Ok(NewInstanceReply::Exception(exception)),
+            _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
+        }
+    }
+}

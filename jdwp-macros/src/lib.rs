@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 
+use proc_macro2::Ident;
 use quote::{quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
@@ -55,63 +56,61 @@ pub fn jdwp_readable(item: TokenStream) -> TokenStream {
             tokens.into()
         }
         Data::Enum(enum_data) => {
-            let fields = enum_data
-                .variants
+            let Some(repr) = derive_input
+                .attrs
                 .iter()
-                .map(|variant| match variant.fields {
-                    Fields::Unnamed(ref fields) if fields.unnamed.len() == 1 => {
-                        Some((&variant.ident, &fields.unnamed[0].ty))
-                    }
-                    _ => None,
-                })
-                .collect::<Option<Vec<_>>>();
+                .find(|attr| attr.path.is_ident("repr")) else {
+                return Error::new(enum_data.enum_token.span, "No explicit repr")
+                    .to_compile_error()
+                    .into();
+            };
+            let repr = repr.parse_args::<Type>().expect("TODO");
 
-            if let Some(fields) = fields {
-                let ident = derive_input.ident;
+            let mut match_arms = Vec::with_capacity(enum_data.variants.len());
 
-                let mut locals = Vec::with_capacity(fields.len());
-                let mut match_arms = Vec::with_capacity(fields.len());
-
-                for (i, (variant, ty)) in fields.iter().enumerate() {
-                    locals.push(quote! {
-                        <::core::option::Option::<#ty> as ::jdwp::codec::JdwpReadable>::read(read)?
-                    });
-                    let mut match_arm = Vec::with_capacity(fields.len());
-                    for j in 0..fields.len() {
-                        match_arm.push(if j == i {
-                            quote!(::core::option::Option::Some(matched))
-                        } else {
-                            quote!(::core::option::Option::None)
-                        })
-                    }
-                    match_arms.push(quote! {
-                        (#(#match_arm),*) => ::std::result::Result::Ok(#ident::#variant(matched))
-                    });
-                }
-
-                let tokens = quote! {
-                    impl ::jdwp::codec::JdwpReadable for #ident {
-                        fn read<R: ::std::io::Read>(read: &mut ::jdwp::codec::JdwpReader<R>) -> ::std::io::Result<Self> {
-                            match (#(#locals),*) {
-                                #(#match_arms,)*
-                                _ => ::std::result::Result::Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "Multiple values in response")),
-                            }
-                        }
-                    }
-                };
-                tokens.into()
-            } else {
-                Error::new(
-                        enum_data.enum_token.span,
-                        "Can derive JdwpReadable only for enums with all variants having a single unnamed field",
+            for v in &enum_data.variants {
+                let Some((_, ref d)) = v.discriminant else {
+                    return Error::new(
+                        v.span(),
+                        "No explicit discriminant",
                     )
                     .to_compile_error()
                     .into()
+                };
+                let name = &v.ident;
+                let constructor = match &v.fields {
+                    Fields::Named(named) => {
+                        let fields = named.named.iter().map(|f| f.ident.as_ref().unwrap());
+                        quote!( { #(#fields: ::jdwp::codec::JdwpReadable::read(read)?,)* } )
+                    }
+                    Fields::Unnamed(unnamed) => {
+                        let fields = unnamed
+                            .unnamed
+                            .iter()
+                            .map(|_| quote!(::jdwp::codec::JdwpReadable::read(read)?));
+                        quote!( ( #(#fields),* ) )
+                    }
+                    Fields::Unit => quote!(),
+                };
+                match_arms.push(quote!(x if x == (#d) => Self::#name #constructor));
             }
+            let ident = &derive_input.ident;
+            let tokens = quote! {
+                impl ::jdwp::codec::JdwpReadable for #ident {
+                    fn read<R: ::std::io::Read>(read: &mut ::jdwp::codec::JdwpReader<R>) -> ::std::io::Result<Self> {
+                        let res = match #repr::read(read)? {
+                            #(#match_arms,)*
+                            _ => return Err(::std::io::Error::from(::std::io::ErrorKind::InvalidData)),
+                        };
+                        Ok(res)
+                    }
+                }
+            };
+            tokens.into()
         }
         Data::Union(union_data) => Error::new(
             union_data.union_token.span,
-            "Can derive JdwpReadable only for structs",
+            "Can derive JdwpReadable only for structs and enums with explicit discriminants",
         )
         .to_compile_error()
         .into(),
@@ -124,11 +123,6 @@ pub fn jdwp_writable(item: TokenStream) -> TokenStream {
 
     match &derive_input.data {
         Data::Struct(struct_data) => {
-            let ident = derive_input.ident;
-            let generic_params = derive_input.generics.params;
-            let generic_names = get_generic_names(&generic_params);
-            let generics_where = derive_input.generics.where_clause;
-
             let write = match &struct_data.fields {
                 Fields::Unit => quote!(),
                 Fields::Named(named) => {
@@ -146,6 +140,10 @@ pub fn jdwp_writable(item: TokenStream) -> TokenStream {
                     quote!(#(#fields;)*)
                 }
             };
+            let ident = derive_input.ident;
+            let generic_params = derive_input.generics.params;
+            let generic_names = get_generic_names(&generic_params);
+            let generics_where = derive_input.generics.where_clause;
             let tokens = quote! {
                 impl<#generic_params> ::jdwp::codec::JdwpWritable for #ident<#generic_names> #generics_where {
                     fn write<W: ::std::io::Write>(&self, write: &mut ::jdwp::codec::JdwpWriter<W>) -> ::std::io::Result<()> {
@@ -156,15 +154,72 @@ pub fn jdwp_writable(item: TokenStream) -> TokenStream {
             };
             tokens.into()
         }
-        Data::Enum(enum_data) => Error::new(
-            enum_data.enum_token.span,
-            "Can derive JdwpWritable only for structs",
-        )
-        .to_compile_error()
-        .into(),
+        Data::Enum(enum_data) => {
+            let Some(repr) = derive_input
+                .attrs
+                .iter()
+                .find(|attr| attr.path.is_ident("repr")) else {
+                return Error::new(enum_data.enum_token.span, "No explicit repr")
+                    .to_compile_error()
+                    .into();
+            };
+            let repr = repr.parse_args::<Type>().expect("TODO");
+
+            let mut match_arms = Vec::with_capacity(enum_data.variants.len());
+
+            for v in &enum_data.variants {
+                let Some((_, ref d)) = v.discriminant else {
+                    return Error::new(
+                        v.span(),
+                        "No explicit discriminant",
+                    )
+                    .to_compile_error()
+                    .into()
+                };
+
+                let (destruct, writes) = match &v.fields {
+                    Fields::Named(named) => {
+                        let names = named
+                            .named
+                            .iter()
+                            .map(|f| f.ident.as_ref().unwrap())
+                            .collect::<Vec<_>>();
+                        (quote!({ #(#names),* }), quote!(#(#names.write(write)?;)*))
+                    }
+                    Fields::Unnamed(unnamed) => {
+                        let names = (0..unnamed.unnamed.len())
+                            .map(|i| Ident::new(&format!("case_{i}"), unnamed.span()))
+                            .collect::<Vec<_>>();
+                        (quote!((#(#names),*)), quote!(#(#names.write(write)?;)*))
+                    }
+                    Fields::Unit => (quote!(), quote!()),
+                };
+
+                let name = &v.ident;
+
+                match_arms.push(quote! {
+                    Self::#name #destruct => {
+                        #repr::write(&(#d), write)?;
+                        #writes
+                    }
+                });
+            }
+            let ident = derive_input.ident;
+            let tokens = quote! {
+                impl ::jdwp::codec::JdwpWritable for #ident {
+                    fn write<W: ::std::io::Write>(&self, write: &mut ::jdwp::codec::JdwpWriter<W>) -> ::std::io::Result<()> {
+                        match self {
+                            #(#match_arms)*
+                        }
+                        Ok(())
+                    }
+                }
+            };
+            tokens.into()
+        }
         Data::Union(union_data) => Error::new(
             union_data.union_token.span,
-            "Can derive JdwpWritable only for structs",
+            "Can derive JdwpWritable only for structs and enums with explicit discriminants",
         )
         .to_compile_error()
         .into(),

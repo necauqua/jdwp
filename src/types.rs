@@ -8,8 +8,26 @@ use std::{
     ops::Deref,
 };
 
-use crate::enums::{ModifierKind, StepDepth, StepSize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+
+pub trait JdwpId: Clone + Copy {
+    type Raw;
+
+    /// Creates an instance of Self from an arbitrary number.
+    ///
+    /// This is not unsafe as invalid IDs do not cause UB, but it is up to the
+    /// caller to ensure that the id is valid for the target JVM.
+    ///
+    /// Also nothing prevents you from getting an ID from one JVM and using it
+    /// for another, or creating it through [JdwpReadable::read].
+    fn from_raw(raw: Self::Raw) -> Self;
+
+    /// The underlying raw value.
+    ///
+    /// It is opaque and given out by the JVM, but in case you ever need it,
+    /// here it is.
+    fn raw(self) -> Self::Raw;
+}
 
 /// Uniquely identifies an object in the target VM.
 ///
@@ -27,6 +45,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 /// [DisableCollection](super::commands::object_reference::DisableCollection)
 /// command, but it is not usually necessary to do so.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct ObjectID(u64);
 
 /// Uniquely identifies a method in some class in the target VM.
@@ -40,6 +59,7 @@ pub struct ObjectID(u64);
 /// The [ReferenceTypeID] can identify either the declaring type of the method
 /// or a subtype.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct MethodID(u64);
 
 /// Uniquely identifies a field in some class in the target VM.
@@ -53,6 +73,7 @@ pub struct MethodID(u64);
 /// The [ReferenceTypeID] can identify either the declaring type of the field
 /// or a subtype.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct FieldID(u64);
 
 /// Uniquely identifies a frame in the target VM.
@@ -62,6 +83,7 @@ pub struct FieldID(u64);
 ///
 /// The [FrameID] need only be valid during the time its thread is suspended.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct FrameID(u64);
 
 /// Uniquely identifies a reference type in the target VM.
@@ -74,21 +96,21 @@ pub struct FrameID(u64);
 /// reused to identify a different reference type, regardless of whether the
 /// referenced class has been unloaded.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct ReferenceTypeID(u64);
 
 macro_rules! ids {
     ($($id:ident: $tpe:ident),* $(,)?) => {
         $(
-            impl $tpe {
-                #[doc = "Creates a new instance of ["]
-                #[doc = stringify!($tpe)]
-                #[doc = "] from an arbitrary number."]
-                /// # Safety
-                /// It is up to the caller to ensure that the id does indeed exist and is correct.
-                ///
-                /// You can 'safely' obtain it by [JdwpReadable::read], but that will be incorrect obviously.
-                pub const unsafe fn new(raw: u64) -> Self {
+            impl JdwpId for $tpe {
+                type Raw = u64;
+
+                fn from_raw(raw: u64) -> Self {
                     Self(raw)
+                }
+
+                fn raw(self) -> u64 {
+                    self.0
                 }
             }
 
@@ -139,11 +161,13 @@ ids! {
 
 /// Uniquely identifies an object in the target VM that is known to be a thread.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct ThreadID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be a thread
 /// group.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct ThreadGroupID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be a string
@@ -151,52 +175,56 @@ pub struct ThreadGroupID(ObjectID);
 ///
 /// Note: this is very different from string, which is a value.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct StringID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be a class
 /// loader object.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct ClassLoaderID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be a class
 /// object.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct ClassObjectID(ObjectID);
 
 /// Uniquely identifies an object in the target VM that is known to be an array.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct ArrayID(ObjectID);
 
 /// Uniquely identifies a reference type in the target VM that is known to be
 /// a class type.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct ClassID(ReferenceTypeID);
 
 /// Uniquely identifies a reference type in the target VM that is known to be
 /// an interface type.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct InterfaceID(ReferenceTypeID);
 
 /// Uniquely identifies a reference type in the target VM that is known to be
 /// an array type.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(transparent)]
 pub struct ArrayTypeID(ReferenceTypeID);
 
 macro_rules! wrapper_ids {
     ($($deref:ident {$($tpe:ident),* $(,)?})*) => {
         $($(
-            impl $tpe {
-                #[doc = "Creates a new instance of ["]
-                #[doc = stringify!($tpe)]
-                #[doc = "] from an arbitrary ["]
-                #[doc = stringify!($deref)]
-                #[doc = "]."]
-                /// # Safety
-                /// It is up to the caller to ensure that the id does indeed correspond to this type.
-                ///
-                /// You can 'safely' obtain it by [JdwpReadable::read], but that will be incorrect obviously.
-                pub const unsafe fn new(id: $deref) -> Self {
-                    Self(id)
+            impl JdwpId for $tpe {
+                type Raw = u64;
+
+                fn from_raw(raw: u64) -> Self {
+                    Self($deref::from_raw(raw))
+                }
+
+                fn raw(self) -> u64 {
+                    self.0.0
                 }
             }
 
@@ -292,10 +320,17 @@ impl Value {
 
 /// A writable-only wrapper around [Value] that only writes the value itself
 /// without a tag.
+///
 /// Used in places where JDWP specifies an `untagged-value` type and expects
 /// no tag since it should be derived from context.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct UntaggedValue(Value);
+pub struct UntaggedValue(pub Value);
+
+impl From<Value> for UntaggedValue {
+    fn from(value: Value) -> Self {
+        Self(value)
+    }
+}
 
 impl Deref for UntaggedValue {
     type Target = Value;
@@ -322,7 +357,7 @@ impl JdwpWritable for UntaggedValue {
     }
 }
 
-macro_rules! tagged_enum {
+macro_rules! tagged_jdwp_io {
     ($enum:ident <-> $tag:ident, $($tpe:ident),* { $($read_extras:tt)* } { $($write_extras:tt)* }) => {
         impl JdwpReadable for $enum {
             fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
@@ -345,10 +380,10 @@ macro_rules! tagged_enum {
             }
         }
     };
-    ($($tt:tt)*) => { tagged_enum!($($tt)* {} {}); }
+    ($($tt:tt)*) => { tagged_jdwp_io!($($tt)* {} {}); }
 }
 
-tagged_enum! {
+tagged_jdwp_io! {
     Value <-> Tag,
     Byte, Boolean, Char, Int, Short, Long, Float, Double, Object
     {
@@ -412,7 +447,7 @@ impl Deref for TaggedObjectID {
     }
 }
 
-tagged_enum! {
+tagged_jdwp_io! {
     TaggedObjectID <-> Tag,
     Array, Object, String, Thread, ThreadGroup, ClassLoader, ClassObject
     { _ => Err(io::Error::from(io::ErrorKind::InvalidData)) }
@@ -480,7 +515,7 @@ impl ArrayRegion {
     }
 }
 
-tagged_enum! {
+tagged_jdwp_io! {
     ArrayRegion <-> Tag,
     Byte, Boolean, Char, Short, Int, Long, Float, Double, Object
     { _ => Err(io::Error::from(io::ErrorKind::InvalidData)) }
@@ -531,7 +566,7 @@ impl Deref for TaggedReferenceTypeID {
     }
 }
 
-tagged_enum! {
+tagged_jdwp_io! {
     TaggedReferenceTypeID <-> TypeTag,
     Class, Interface, Array
 }
@@ -566,279 +601,118 @@ pub struct Location {
     pub index: u64,
 }
 
-macro_rules! optional_impl {
-    ($($tpe:ident),* $(,)?) => {
-        $(
-            impl JdwpReadable for Option<$tpe> {
-                fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-                    if read.peek_tag_byte()? != 0 {
-                        JdwpReadable::read(read).map(Some)
-                    } else {
-                        read.read_tag_byte()?; // consume it
-                        Ok(None)
-                    }
-                }
-            }
+impl JdwpReadable for Option<TaggedReferenceTypeID> {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        use TaggedReferenceTypeID::*;
 
-            impl JdwpWritable for Option<$tpe> {
-                fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
-                    match self {
-                        Some(x) => x.write(write),
-                        None => write.write_u8(0),
-                    }
-                }
-            }
-        )*
-    };
+        let Some(tag) = Option::<TypeTag>::read(read)? else { return Ok(None); };
+        let id = ReferenceTypeID::read(read)?;
+        let res = match tag {
+            TypeTag::Class => Class(ClassID(id)),
+            TypeTag::Interface => Interface(InterfaceID(id)),
+            TypeTag::Array => Array(ArrayTypeID(id)),
+        };
+        Ok(Some(res))
+    }
 }
 
-optional_impl![Value, TaggedObjectID, Location];
+impl JdwpReadable for Option<Location> {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        let Some(reference_id) = Option::<TaggedReferenceTypeID>::read(read)? else { return Ok(None); };
+        let res = Location {
+            reference_id,
+            method_id: JdwpReadable::read(read)?,
+            index: JdwpReadable::read(read)?,
+        };
+        Ok(Some(res))
+    }
+}
+
+impl JdwpReadable for Option<Value> {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        use JdwpReadable as R;
+        use Value::*;
+
+        let Some(tag) = Option::<Tag>::read(read)? else { return Ok(None); };
+        let res = match tag {
+            Tag::Byte => Byte(R::read(read)?),
+            Tag::Char => Char(R::read(read)?),
+            Tag::Short => Short(R::read(read)?),
+            Tag::Int => Int(R::read(read)?),
+            Tag::Long => Long(R::read(read)?),
+            Tag::Float => Float(R::read(read)?),
+            Tag::Double => Double(R::read(read)?),
+            Tag::Object => Object(R::read(read)?),
+            Tag::Boolean => Boolean(R::read(read)?),
+            _ => return Err(io::Error::from(io::ErrorKind::InvalidData)),
+        };
+        Ok(Some(res))
+    }
+}
+
+impl JdwpReadable for Option<TaggedObjectID> {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        use JdwpReadable as R;
+        use TaggedObjectID::*;
+
+        let Some(tag) = Option::<Tag>::read(read)? else { return Ok(None); };
+        let res = match tag {
+            Tag::Array => Array(R::read(read)?),
+            Tag::Object => Object(R::read(read)?),
+            Tag::String => String(R::read(read)?),
+            Tag::Thread => Thread(R::read(read)?),
+            Tag::ThreadGroup => ThreadGroup(R::read(read)?),
+            Tag::ClassLoader => ClassLoader(R::read(read)?),
+            Tag::ClassObject => ClassObject(R::read(read)?),
+            _ => return Err(io::Error::from(io::ErrorKind::InvalidData)),
+        };
+        Ok(Some(res))
+    }
+}
 
 /// An opaque type for the request id, which is represented in JDWP docs as just
 /// a raw integer and exists only here in Rust similar to all the other IDs.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
 pub struct RequestID(i32);
 
-impl RequestID {
-    /// Creates a new instance of [RequestID] from an arbitrary number.
-    /// # Safety
-    /// It is up to the caller to ensure that the id does indeed exist and is
-    /// correct. You can 'safely' obtain it by [JdwpReadable::read], but
-    /// that will be incorrect obviously.
-    pub const unsafe fn new(id: i32) -> Self {
-        Self(id)
+impl JdwpId for RequestID {
+    type Raw = i32;
+
+    fn from_raw(raw: i32) -> Self {
+        Self(raw)
+    }
+
+    fn raw(self) -> i32 {
+        self.0
     }
 }
 
-/// Limit the requested event to be reported at most once after a given number
-/// of occurrences.
-///
-/// The event is not reported the first count - 1 times this filter is reached.
-///
-/// To request a one-off event, call this method with a count of 1.
-///
-/// Once the count reaches 0, any subsequent filters in this request are
-/// applied.
-///
-/// If none of those filters cause the event to be suppressed, the event is
-/// reported.
-///
-/// Otherwise, the event is not reported.
-///
-/// In either case subsequent events are never reported for this request.
-///
-/// This modifier can be used with any event kind.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct Count {
-    /// Count before event. One for one-off
-    pub count: i32,
-}
-
-/// Conditional on expression
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct Conditional {
-    /// For the future
-    pub expr_id: i32,
-}
-
-/// Restricts reported events to those in the given thread.
-/// This modifier can be used with any event kind except for class unload.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct ThreadOnly {
-    /// Required thread
-    pub thread: ThreadID,
-}
-
-/// For class prepare events, restricts the events generated by this request to
-/// be the preparation of the given reference type and any subtypes.
-///
-/// For monitor wait and waited events, restricts the events generated by this
-/// request to those whose monitor object is of the given reference type or any
-/// of its subtypes.
-///
-/// For other events, restricts the events generated by this request to those
-/// whose location is in the given reference type or any of its subtypes.
-///
-/// An event will be generated for any location in a reference type that can be
-/// safely cast to the given reference type.
-///
-/// This modifier can be used with any event kind except class unload, thread
-/// start, and thread end.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct ClassOnly {
-    /// Required class
-    pub class: ReferenceTypeID,
-}
-
-/// Restricts reported events to those for classes whose name matches the given
-/// restricted regular expression.
-///
-/// For class prepare events, the prepared class name is matched.
-///
-/// For class unload events, the unloaded class name is matched.
-///
-/// For monitor wait and waited events, the name of the class of the monitor
-/// object is matched.
-///
-/// For other events, the class name of the event's location is matched.
-///
-/// This modifier can be used with any event kind except thread start and
-/// thread end.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct ClassMatch {
-    /// Required class pattern.
-    ///
-    /// Matches are limited to exact matches of the given class pattern and
-    /// matches of patterns that begin or end with `*`; for example, `*.Foo` or
-    /// `java.*`.
-    pub class_pattern: String,
-}
-
-/// Restricts reported events to those for classes whose name does not match
-/// the given restricted regular expression.
-///
-/// For class prepare events, the prepared class name is matched.
-///
-/// For class unload events, the unloaded class name is matched.
-///
-/// For monitor wait and waited events, the name of the class of the monitor
-/// object is matched.
-///
-/// For other events, the class name of the event's location is matched.
-///
-/// This modifier can be used with any event kind except thread start and
-/// thread end.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct ClassExclude {
-    /// Disallowed class pattern.
-    ///
-    /// Matches are limited to exact matches of the given class pattern and
-    /// matches of patterns that begin or end with `*`; for example, `*.Foo` or
-    /// `java.*`.
-    pub class_pattern: String,
-}
-
-/// Restricts reported events to those that occur at the given location.
-///
-/// This modifier can be used with breakpoint, field access, field
-/// modification, step, and exception event kinds.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct LocationOnly {
-    /// Required location
-    pub location: Location,
-}
-
-/// Restricts reported exceptions by their class and whether they are caught or
-/// uncaught.
-///
-/// This modifier can be used with exception event kinds only.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct ExceptionOnly {
-    /// Exception to report. `None` means report exceptions of all types.
-    ///
-    /// A non-null type restricts the reported exception events to exceptions
-    /// of the given type or any of its subtypes.
-    pub exception: Option<ReferenceTypeID>,
-    /// Report caught exceptions
-    pub uncaught: bool,
-    /// Report uncaught exceptions.
-    ///
-    /// Note that it is not always possible to determine whether an exception
-    /// is caught or uncaught at the time it is thrown.
-    ///
-    /// See the exception event catch location under composite events for more
-    /// information.
-    pub caught: bool,
-}
-
-/// Restricts reported events to those that occur for a given field.
-///
-/// This modifier can be used with field access and field modification event
-/// kinds only.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct FieldOnly {
-    /// Type in which field is declared
-    pub declaring: ReferenceTypeID,
-    /// Required field
-    pub field_id: FieldID,
-}
-
-/// Restricts reported step events to those which satisfy depth and size
-/// constraints.
-///
-/// This modifier can be used with step event kinds only.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct Step {
-    /// Thread in which to step
-    pub thread: ThreadID,
-    /// Size of each step
-    pub size: StepSize,
-    /// Relative call stack limit
-    pub depth: StepDepth,
-}
-
-/// Restricts reported events to those whose active 'this' object is the given
-/// object.
-///
-/// Match value is the null object for static methods.
-///
-/// This modifier can be used with any event kind except class prepare,
-/// class unload, thread start, and thread end.
-///
-/// Introduced in JDWP version 1.4.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct InstanceOnly {
-    /// Required 'this' object
-    pub instance: ObjectID,
-}
-
-/// Restricts reported class prepare events to those for reference types which
-/// have a source name which matches the given restricted regular expression.
-///
-/// The source names are determined by the reference type's
-/// SourceDebugExtension.
-///
-/// This modifier can only be used with class prepare events.
-///
-/// Since JDWP version 1.6.
-///
-/// Requires the `can_use_source_name_filters` capability - see
-/// [CapabilitiesNew](crate::commands::virtual_machine::CapabilitiesNew).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct SourceNameMatch {
-    /// Required source name pattern.
-    /// Matches are limited to exact matches of the given pattern and matches
-    /// of patterns that begin or end with `*`; for example, `*.Foo` or
-    /// `java.*`
-    pub source_name_pattern: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Modifier {
-    Count(Count),
-    Conditional(Conditional),
-    ThreadOnly(ThreadOnly),
-    ClassOnly(ClassOnly),
-    ClassMatch(ClassMatch),
-    ClassExclude(ClassExclude),
-    LocationOnly(LocationOnly),
-    ExceptionOnly(ExceptionOnly),
-    FieldOnly(FieldOnly),
-    Step(Step),
-    InstanceOnly(InstanceOnly),
-    SourceNameMatch(SourceNameMatch),
-}
-
-tagged_enum! {
-    Modifier <-> ModifierKind,
-    Count, Conditional, ThreadOnly, ClassOnly, ClassMatch, ClassExclude, LocationOnly, ExceptionOnly, FieldOnly, Step, InstanceOnly, SourceNameMatch
+impl JdwpReadable for Option<RequestID> {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        match i32::read(read)? {
+            0 => Ok(None),
+            x => Ok(Some(RequestID(x))),
+        }
+    }
 }
 
 /// A response from 3 types of invoke method commands: virtual, static and
 /// interface static. The response is either a value or an exception - we model
 /// it with a enum for better ergonomics.
-#[derive(Debug, JdwpReadable)]
+#[derive(Debug)]
 pub enum InvokeMethodReply {
     Value(Value),
     Exception(TaggedObjectID),
+}
+
+impl JdwpReadable for InvokeMethodReply {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        let value = Option::<Value>::read(read)?;
+        let exception = Option::<TaggedObjectID>::read(read)?;
+        match (value, exception) {
+            (Some(value), None) => Ok(InvokeMethodReply::Value(value)),
+            (None, Some(exception)) => Ok(InvokeMethodReply::Exception(exception)),
+            _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
+        }
+    }
 }

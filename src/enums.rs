@@ -7,7 +7,7 @@ use bitflags::bitflags;
 
 use crate::codec::{JdwpReadable, JdwpReader, JdwpWritable, JdwpWriter};
 
-macro_rules! readable_enum {
+macro_rules! jdwp_enum {
     ($e:ident: $repr:ident, $($name:ident = $id:literal | $string:literal),* $(,)?) => {
         #[repr($repr)]
         #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -19,21 +19,21 @@ macro_rules! readable_enum {
             )*
         }
 
-        impl $e {
-            pub fn from(n: $repr) -> Option<Self> {
-                match n {
-                    $($id => Some($e::$name),)*
-                    _ => None
+        impl TryFrom<$repr> for $e {
+            type Error = $repr;
+
+            fn try_from(value: $repr) -> Result<Self, Self::Error> {
+                match value {
+                    $($id => Ok($e::$name),)*
+                    other => Err(other),
                 }
             }
         }
 
         impl JdwpReadable for $e {
             fn read<R: Read>(read: &mut JdwpReader<R>) -> std::io::Result<Self> {
-                match $repr::read(read)? {
-                    $($id => Ok($e::$name),)*
-                    _ => Err(Error::from(ErrorKind::InvalidData))
-                }
+                Self::try_from($repr::read(read)?)
+                    .map_err(|_| Error::from(ErrorKind::InvalidData))
             }
         }
 
@@ -44,10 +44,10 @@ macro_rules! readable_enum {
         }
     };
     ($e:ident: $repr:ident, $($name:ident = $id:literal),* $(,)?) => {
-        readable_enum!($e: $repr, $($name = $id | "",)*);
+        jdwp_enum!($e: $repr, $($name = $id | "",)*);
     };
     ($e:ident: $repr:ident | Display, $($name:ident = $id:literal | $string:literal),* $(,)?) => {
-        readable_enum!($e: $repr, $($name = $id | $string,)*);
+        jdwp_enum!($e: $repr, $($name = $id | $string,)*);
 
         impl Display for $e {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -59,7 +59,7 @@ macro_rules! readable_enum {
     };
 }
 
-readable_enum! {
+jdwp_enum! {
     ErrorCode: u16 | Display,
 
     None = 0 | "No error has occurred",
@@ -121,7 +121,7 @@ readable_enum! {
     InvalidCount = 512 | "The count is invalid",
 }
 
-readable_enum! {
+jdwp_enum! {
     EventKind: u8,
 
     SingleStep = 1,
@@ -149,7 +149,7 @@ readable_enum! {
     VmDisconnected = 100,
 }
 
-readable_enum! {
+jdwp_enum! {
     ThreadStatus: u32,
 
     Zombie = 0,
@@ -159,7 +159,7 @@ readable_enum! {
     Wait = 4,
 }
 
-readable_enum! {
+jdwp_enum! {
     SuspendStatus: u32,
 
     NotSuspended = 0,
@@ -190,7 +190,7 @@ impl JdwpWritable for ClassStatus {
     }
 }
 
-readable_enum! {
+jdwp_enum! {
     TypeTag: u8,
 
     Class = 1 | "ReferenceType is a class",
@@ -198,7 +198,16 @@ readable_enum! {
     Array = 3 | "ReferenceType is an array",
 }
 
-readable_enum! {
+impl JdwpReadable for Option<TypeTag> {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        Ok(match u8::read(read)? {
+            0 => None,
+            raw => Some(TypeTag::try_from(raw).map_err(|_| Error::from(ErrorKind::InvalidData))?),
+        })
+    }
+}
+
+jdwp_enum! {
     Tag: u8,
 
     Array = 91 | "'[' - an array object ([ObjectID](crate::types::ObjectID) size).",
@@ -219,7 +228,16 @@ readable_enum! {
     ClassObject = 99 | "'c' - a class object object ([ObjectID](crate::types::ObjectID) size).",
 }
 
-readable_enum! {
+impl JdwpReadable for Option<Tag> {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        Ok(match u8::read(read)? {
+            0 => None,
+            raw => Some(Tag::try_from(raw).map_err(|_| Error::from(ErrorKind::InvalidData))?),
+        })
+    }
+}
+
+jdwp_enum! {
     StepDepth: u32,
 
     Into = 0 | "Step into any method calls that occur before the end of the step",
@@ -227,14 +245,14 @@ readable_enum! {
     Out = 2 | "Step out of the current method",
 }
 
-readable_enum! {
+jdwp_enum! {
     StepSize: u32,
 
     Min = 0 | "Step by the minimum possible amount (often a byte code instruction)",
     Line = 1 | "Step to the next source line unless there is no line number information in which case a MIN step is done instead",
 }
 
-readable_enum! {
+jdwp_enum! {
     SuspendPolicy: u8,
 
     None = 0 | "Suspend no threads when this event is encountered",
@@ -245,6 +263,7 @@ readable_enum! {
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub struct InvokeOptions: u32 {
+        const NONE = 0x00;
         /// otherwise, all threads started
         const SINGLE_THREADED = 0x01;
         /// otherwise, normal virtual invoke (instance methods only)
@@ -264,7 +283,7 @@ impl JdwpWritable for InvokeOptions {
     }
 }
 
-readable_enum! {
+jdwp_enum! {
     ModifierKind: u8,
 
     Count = 1 | "Limit the requested event to be reported at most once after a given number of occurrences. The event is not reported the first count - 1 times this filter is reached. To request a one-off event, call this method with a count of 1.",

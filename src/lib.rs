@@ -2,12 +2,7 @@
 
 extern crate self as jdwp;
 
-use std::{
-    fmt::{Display, Formatter},
-    io::{Error, ErrorKind, Read, Write},
-};
-
-use byteorder::WriteBytesExt;
+use std::fmt::{Display, Formatter};
 
 use crate::{
     codec::{JdwpReadable, JdwpReader, JdwpWritable, JdwpWriter},
@@ -18,6 +13,7 @@ pub mod client;
 pub mod codec;
 pub mod commands;
 pub mod enums;
+pub mod event_modifier;
 pub mod jvm;
 pub mod types;
 
@@ -45,14 +41,14 @@ impl Display for CommandId {
     }
 }
 
+#[derive(Debug, Copy, Clone, JdwpReadable, JdwpWritable)]
 #[repr(u8)]
-#[derive(Debug, Copy, Clone)]
 enum PacketMeta {
     Command(CommandId) = 0x00,
     Reply(ErrorCode) = 0x80,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, JdwpReadable, JdwpWritable)]
 pub struct PacketHeader {
     length: u32,
     id: u32,
@@ -61,36 +57,4 @@ pub struct PacketHeader {
 
 impl PacketHeader {
     pub(crate) const JDWP_SIZE: usize = 11;
-}
-
-impl JdwpReadable for PacketHeader {
-    fn read<R: Read>(reader: &mut JdwpReader<R>) -> std::io::Result<Self> {
-        let length = u32::read(reader)?;
-        let id = u32::read(reader)?;
-        let meta = match u8::read(reader)? {
-            0x00 => PacketMeta::Command(CommandId::read(reader)?),
-            0x80 => PacketMeta::Reply(ErrorCode::read(reader)?),
-            _ => Err(Error::from(ErrorKind::InvalidData))?,
-        };
-        Ok(PacketHeader { length, id, meta })
-    }
-}
-
-impl JdwpWritable for PacketHeader {
-    fn write<W: Write>(&self, writer: &mut JdwpWriter<W>) -> std::io::Result<()> {
-        self.length.write(writer)?;
-        self.id.write(writer)?;
-        match self.meta {
-            PacketMeta::Command(id) => {
-                // oh well maybe someday we'll be able to get the enum discriminant
-                // (or I make the derive work for such enums)
-                writer.write_u8(0x00)?;
-                id.write(writer)
-            }
-            PacketMeta::Reply(error_code) => {
-                writer.write_u8(0x80)?;
-                error_code.write(writer)
-            }
-        }
-    }
 }

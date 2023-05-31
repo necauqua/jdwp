@@ -237,8 +237,8 @@ impl JdwpReadable for StackDepth {
 /// method are released. Note: this does not apply to JNI locks or
 /// java.util.concurrent.locks locks.
 ///
-/// Events, such as [MethodExit](super::event::MethodExit), are generated as
-/// they would be in a normal return.
+/// Events, such as [MethodExit](super::event::Event::MethodExit), are generated
+/// as they would be in a normal return.
 ///
 /// The called method must be a non-native Java programming language method.
 /// Forcing return on a thread with only one frame on the stack causes the

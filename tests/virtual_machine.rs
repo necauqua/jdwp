@@ -42,38 +42,38 @@ fn class_by_signature() -> Result {
 
     assert_snapshot!(classes, @r###"
     [
-        UnnamedClass {
-            type_id: Class(
+        (
+            Class(
                 [opaque_id],
             ),
-            status: ClassStatus(
+            ClassStatus(
                 VERIFIED | PREPARED | INITIALIZED,
             ),
-        },
-        UnnamedClass {
-            type_id: Interface(
+        ),
+        (
+            Interface(
                 [opaque_id],
             ),
-            status: ClassStatus(
+            ClassStatus(
                 VERIFIED | PREPARED | INITIALIZED,
             ),
-        },
-        UnnamedClass {
-            type_id: Array(
+        ),
+        (
+            Array(
                 [opaque_id],
             ),
-            status: ClassStatus(
+            ClassStatus(
                 0x0,
             ),
-        },
-        UnnamedClass {
-            type_id: Array(
+        ),
+        (
+            Array(
                 [opaque_id],
             ),
-            status: ClassStatus(
+            ClassStatus(
                 0x0,
             ),
-        },
+        ),
     ]
     "###);
 
@@ -338,12 +338,10 @@ fn set_default_stratum() -> Result {
 fn instance_counts() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new("LBasic;"))?.type_id;
-    let id2 = client
-        .send(ClassBySignature::new("LBasic$NestedClass;"))?
-        .type_id;
+    let (type_id, _) = *client.send(ClassBySignature::new("LBasic;"))?;
+    let (type_id2, _) = *client.send(ClassBySignature::new("LBasic$NestedClass;"))?;
 
-    let counts = client.send(InstanceCounts::new(vec![*id, *id2]))?;
+    let counts = client.send(InstanceCounts::new(vec![*type_id, *type_id2]))?;
 
     assert_eq!(counts, [2, 0]);
 

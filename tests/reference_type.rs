@@ -37,8 +37,8 @@ where
     signatures
         .iter()
         .map(|item| {
-            let id = client.send(ClassBySignature::new(*item))?.type_id;
-            Ok(client.send(new(*id))?)
+            let (type_id, _) = *client.send(ClassBySignature::new(*item))?;
+            Ok(client.send(new(*type_id))?)
         })
         .collect()
 }
@@ -140,9 +140,9 @@ fn modifiers() -> Result {
 fn fields() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
 
-    let mut fields = client.send(Fields::new(*id))?;
+    let mut fields = client.send(Fields::new(*type_id))?;
     fields.sort_by_key(|f| f.name.clone());
 
     assert_snapshot!(fields, @r###"
@@ -197,9 +197,9 @@ fn fields() -> Result {
 fn methods() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
 
-    let mut methods = client.send(Methods::new(*id))?;
+    let mut methods = client.send(Methods::new(*type_id))?;
     methods.sort_by_key(|f| f.name.clone());
 
     assert_snapshot!(methods, @r###"
@@ -262,9 +262,9 @@ fn methods() -> Result {
 fn get_values() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
 
-    let mut fields = client.send(Fields::new(*id))?;
+    let mut fields = client.send(Fields::new(*type_id))?;
     fields.sort_by_key(|f| f.name.clone());
 
     let fields = fields
@@ -276,7 +276,7 @@ fn get_values() -> Result {
         })
         .collect::<Vec<_>>();
 
-    let values = client.send(GetValues::new(*id, fields))?;
+    let values = client.send(GetValues::new(*type_id, fields))?;
 
     assert_snapshot!(values, @r###"
     [
@@ -313,8 +313,8 @@ fn source_file() -> Result {
     ]
     "###);
 
-    let id = client.send(ClassBySignature::new(ARRAY_CLS))?.type_id;
-    let array_source_file = client.send(SourceFile::new(*id));
+    let (type_id, _) = *client.send(ClassBySignature::new(ARRAY_CLS))?;
+    let array_source_file = client.send(SourceFile::new(*type_id));
 
     assert_snapshot!(array_source_file, @r###"
     Err(
@@ -331,9 +331,9 @@ fn source_file() -> Result {
 fn nested_types() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
 
-    let mut nested_types = client.send(NestedTypes::new(*id))?;
+    let mut nested_types = client.send(NestedTypes::new(*type_id))?;
     nested_types.sort_by_key(|t| t.tag() as u8);
 
     let nested_types = get_signatures(&mut client, nested_types)?;
@@ -345,10 +345,9 @@ fn nested_types() -> Result {
     ]
     "###);
 
-    let id = client
-        .send(ClassBySignature::new("Ljava/util/HashMap;"))?
-        .type_id;
-    let mut nested_types = client.send(NestedTypes::new(*id))?;
+    let (type_id, _) = *client.send(ClassBySignature::new("Ljava/util/HashMap;"))?;
+
+    let mut nested_types = client.send(NestedTypes::new(*type_id))?;
     nested_types.sort_by_key(|t| t.tag() as u8);
 
     let nested_types = get_signatures(&mut client, nested_types)?;
@@ -405,8 +404,8 @@ fn status() -> Result {
 fn interfaces() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
-    let interfaces = client.send(Interfaces::new(*id))?;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
+    let interfaces = client.send(Interfaces::new(*type_id))?;
     let interfaces = get_signatures(&mut client, interfaces)?;
 
     assert_snapshot!(interfaces, @r###"
@@ -415,10 +414,9 @@ fn interfaces() -> Result {
     ]
     "###);
 
-    let id = client
-        .send(ClassBySignature::new("Ljava/util/ArrayList;"))?
-        .type_id;
-    let interfaces = client.send(Interfaces::new(*id))?;
+    let (type_id, _) = *client.send(ClassBySignature::new("Ljava/util/ArrayList;"))?;
+
+    let interfaces = client.send(Interfaces::new(*type_id))?;
     let interfaces = get_signatures(&mut client, interfaces)?;
 
     assert_snapshot!(interfaces, @r###"
@@ -437,11 +435,11 @@ fn interfaces() -> Result {
 fn class_object() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
-    let class_object = client.send(ClassObject::new(*id))?;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
+    let class_object = client.send(ClassObject::new(*type_id))?;
     let ref_id = client.send(ReflectedType::new(class_object))?;
 
-    assert_eq!(id, ref_id);
+    assert_eq!(type_id, ref_id);
 
     Ok(())
 }
@@ -450,8 +448,8 @@ fn class_object() -> Result {
 fn instances() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
-    let instances = client.send(Instances::new(*id, 10))?;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
+    let instances = client.send(Instances::new(*type_id, 10))?;
 
     // the running instance and the one in the static field
     assert_snapshot!(instances, @r###"
@@ -472,8 +470,8 @@ fn instances() -> Result {
 fn class_file_version() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
-    let version = client.send(ClassFileVersion::new(*id))?;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
+    let version = client.send(ClassFileVersion::new(*type_id))?;
 
     let expected = match common::java_version() {
         8 => (52, 0),
@@ -495,8 +493,8 @@ fn class_file_version() -> Result {
 fn constant_pool() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let id = client.send(ClassBySignature::new(OUR_CLS))?.type_id;
-    let constant_pool = client.send(ConstantPool::new(*id))?;
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
+    let constant_pool = client.send(ConstantPool::new(*type_id))?;
     let mut reader = Cursor::new(constant_pool.bytes);
 
     // pfew lol why did I bother so much
