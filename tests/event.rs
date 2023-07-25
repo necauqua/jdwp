@@ -1,19 +1,28 @@
-use jdwp::{
-    commands::{
-        event::Event,
-        event_request,
-        reference_type::{Fields, Methods},
-        thread_reference,
-        virtual_machine::{AllThreads, ClassBySignature},
-    },
-    enums::{EventKind, SuspendPolicy},
-    event_modifier::Modifier,
-    types::Value,
+use jdwp::spec::{
+    event::Event,
+    event_request::{Clear, Modifier, Set},
+    reference_type::{Fields, Methods},
+    thread_reference,
+    virtual_machine::{AllThreads, ClassBySignature},
+    EventKind, SuspendPolicy, Value,
 };
 
 mod common;
 
 use common::Result;
+
+// #[test]
+// fn field_modification_new() -> Result {
+//     let vm = common::launch_and_attach_vm("basic")?;
+
+//     let (ref_type, _) = vm.class_by_signature("LBasic;")?;
+
+//     let main_thread = vm.main_thread()?;
+//     let ticks = ref_type.field("ticks")?;
+//     // let tick = ref_type.method("tick")?;
+
+//     Ok(())
+// }
 
 #[test]
 fn field_modification() -> Result {
@@ -45,14 +54,14 @@ fn field_modification() -> Result {
 
     let field_only = Modifier::FieldOnly(*type_id, ticks.field_id);
 
-    let request_id = client.send(event_request::Set::new(
+    let request_id = client.send(Set::new(
         EventKind::FieldModification,
         SuspendPolicy::None,
         &[field_only],
     ))?;
 
-    match &client.host_events().recv()?.events[..] {
-        [Event::FieldModification(req_id, tid, loc, (rid, fid), oid, v)] => {
+    match &client.receive_events().recv()?.events[..] {
+        [Event::FieldModification(req_id, tid, loc, (rid, fid, oid), v)] => {
             assert_eq!(*req_id, request_id);
 
             // should be modified in main thread
@@ -75,10 +84,7 @@ fn field_modification() -> Result {
         e => panic!("Unexpected event set received: {:#?}", e),
     }
 
-    client.send(event_request::Clear::new(
-        EventKind::FieldModification,
-        request_id,
-    ))?;
+    client.send(Clear::new(EventKind::FieldModification, request_id))?;
 
     Ok(())
 }

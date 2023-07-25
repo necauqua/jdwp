@@ -1,23 +1,21 @@
 use insta::assert_snapshot;
-use jdwp::{
-    enums::{EventKind, InvokeOptions, SuspendPolicy, Tag},
-    event_modifier::Modifier,
-    types::{JdwpId, TaggedObjectID, Value},
+use jdwp::spec::{
+    EventKind, InvokeOptions, JdwpId, ObjectID, SuspendPolicy, Tag, TaggedObjectID, Value,
 };
+use std::fmt::Write;
 
 macro_rules! debug_and_clone {
     ($($p:ident::{$($e:expr,)*},)*) => {{
         let mut s = String::new();
         $(
-            s.push_str(stringify!($p));
-            s.push_str("::{\n");
+            writeln!(s, "{}::{{", stringify!($p)).unwrap();
             $(
-                s.push_str(&format!("    {:?}\n", {
-                    use jdwp::commands::$p::*;
+                writeln!(s, "    {:?}", {
+                    use jdwp::spec::$p::*;
                     $e.clone()
-                }));
+                }).unwrap();
             )*
-            s.push_str("}\n");
+            writeln!(s, "}}").unwrap();
         )*
         s
     }}
@@ -33,7 +31,7 @@ where
 }
 
 #[test]
-fn manually_cover_clone_and_debug() {
+fn manually_cover_debug_and_clone() {
     let all_commands = debug_and_clone![
         virtual_machine::{
             Version,
@@ -77,13 +75,13 @@ fn manually_cover_clone_and_debug() {
             SignatureWithGeneric::new(id()),
             FieldsWithGeneric::new(id()),
             MethodsWithGeneric::new(id()),
-            Instances::new(id(), 10),
+            Instances::new(id(), InstanceLimit::limit(10)),
             ClassFileVersion::new(id()),
             ConstantPool::new(id()),
         },
         class_type::{
             Superclass::new(id()),
-            SetValues::new(id(), &[(id(), Value::Int(123).into()), (id(), Value::Object(id()).into())]),
+            SetValues::new(id(), &[(id(), 123.into()), (id(), id::<ObjectID>().into())]),
             InvokeMethod::new(id(), id(), id(), &[Value::Int(123), Value::Object(id())], InvokeOptions::NONE),
             NewInstance::new(id(), id(), id(), &[Value::Int(123), Value::Object(id())], InvokeOptions::SINGLE_THREADED),
         },
@@ -105,7 +103,7 @@ fn manually_cover_clone_and_debug() {
             GetValues::new(id(), vec![id(), id()]),
             SetValues::new(id(), &[(id(), Value::Int(123).into()), (id(), Value::Object(id()).into())]),
             MonitorInfo::new(id()),
-            InvokeMethod::new(id(), id(), id(), id(), &[Value::Int(123), Value::Object(id())], InvokeOptions::NONE),
+            InvokeMethod::new(id(), id(), (id(), id()), &[Value::Int(123), Value::Object(id())], InvokeOptions::NONE),
             DisableCollection::new(id()),
             EnableCollection::new(id()),
             IsCollected::new(id()),
@@ -139,7 +137,7 @@ fn manually_cover_clone_and_debug() {
         array_reference::{
             Length::new(id()),
             GetValues::new(id(), 0, 10),
-            SetValues::new(id(), 0, &[Value::Float(123.0).into(), Value::Float(42.0).into()]),
+            SetValues::new(id(), 0, &[123.0, 42.0]),
         },
         class_loader_reference::{
             VisibleClasses::new(id()),
@@ -207,7 +205,7 @@ fn manually_cover_clone_and_debug() {
         SignatureWithGeneric { ref_type: ReferenceTypeID(123) }
         FieldsWithGeneric { ref_type: ReferenceTypeID(123) }
         MethodsWithGeneric { ref_type: ReferenceTypeID(123) }
-        Instances { ref_type: ReferenceTypeID(123), max_instances: 10 }
+        Instances { ref_type: ReferenceTypeID(123), max_instances: Limit(10) }
         ClassFileVersion { ref_type: ReferenceTypeID(123) }
         ConstantPool { ref_type: ReferenceTypeID(123) }
     }
@@ -215,7 +213,7 @@ fn manually_cover_clone_and_debug() {
         Superclass { class_id: ClassID(123) }
         SetValues { class_id: ClassID(123), values: [(FieldID(123), UntaggedValue(Int(123))), (FieldID(123), UntaggedValue(Object(ObjectID(123))))] }
         InvokeMethod { class_id: ClassID(123), thread_id: ThreadID(123), method_id: MethodID(123), arguments: [Int(123), Object(ObjectID(123))], options: InvokeOptions(0x0) }
-        NewInstance { class_id: ClassID(123), thread_id: ThreadID(123), method_id: MethodID(123), arguments: [Int(123), Object(ObjectID(123))], options: InvokeOptions(NONE | SINGLE_THREADED) }
+        NewInstance { class_id: ClassID(123), thread_id: ThreadID(123), method_id: MethodID(123), arguments: [Int(123), Object(ObjectID(123))], options: InvokeOptions(SINGLE_THREADED) }
     }
     array_type::{
         NewInstance { array_type_id: ArrayTypeID(123), length: 10 }
@@ -235,14 +233,14 @@ fn manually_cover_clone_and_debug() {
         GetValues { object: ObjectID(123), fields: [FieldID(123), FieldID(123)] }
         SetValues { object: ObjectID(123), fields: [(FieldID(123), UntaggedValue(Int(123))), (FieldID(123), UntaggedValue(Object(ObjectID(123))))] }
         MonitorInfo { object: ObjectID(123) }
-        InvokeMethod { object: ObjectID(123), thread: ThreadID(123), class: ClassID(123), method: FieldID(123), arguments: [Int(123), Object(ObjectID(123))], options: InvokeOptions(0x0) }
+        InvokeMethod { object: ObjectID(123), thread: ThreadID(123), method: (ClassID(123), MethodID(123)), arguments: [Int(123), Object(ObjectID(123))], options: InvokeOptions(0x0) }
         DisableCollection { object: ObjectID(123) }
         EnableCollection { object: ObjectID(123) }
         IsCollected { object: ObjectID(123) }
         ReferringObjects { object: ObjectID(123), max_referrers: 10 }
     }
     string_reference::{
-        Value { string_object: ObjectID(123) }
+        Value { string_object: StringID(123) }
     }
     thread_reference::{
         Name { thread: ThreadID(123) }
@@ -269,7 +267,7 @@ fn manually_cover_clone_and_debug() {
     array_reference::{
         Length { array_id: ArrayID(123) }
         GetValues { array_id: ArrayID(123), first_index: 0, length: 10 }
-        SetValues { array_id: ArrayID(123), first_index: 0, values: [UntaggedValue(Float(123.0)), UntaggedValue(Float(42.0))] }
+        SetValues { array_id: ArrayID(123), first_index: 0, values: [123.0, 42.0] }
     }
     class_loader_reference::{
         VisibleClasses { class_loader_id: ClassLoaderID(123) }

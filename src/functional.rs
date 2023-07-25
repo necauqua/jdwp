@@ -1,4 +1,4 @@
-use std::{iter, num::NonZeroUsize};
+use std::{fmt::Debug, iter, num::NonZeroUsize};
 
 use std::ops::Deref;
 
@@ -10,7 +10,7 @@ mod sealed {
 ///
 /// It makes it convenient to call certain commands where the input list size
 /// matches the output list size, for example
-/// [GetValues](crate::commands::object_reference::GetValues).
+/// [GetValues](crate::spec::object_reference::GetValues).
 pub trait Coll: sealed::Sealed {
     type Item;
     type Map<U>;

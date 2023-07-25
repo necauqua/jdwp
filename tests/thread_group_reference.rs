@@ -1,49 +1,38 @@
 use std::collections::HashSet;
 
 use common::Result;
-use jdwp::commands::{
-    thread_group_reference::{Children, Name, Parent},
-    thread_reference,
-    virtual_machine::TopLevelThreadGroups,
-};
 
 mod common;
 
 #[test]
 fn system_tree_names() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let thread_group_ids = client.send(TopLevelThreadGroups).unwrap();
-    assert_eq!(thread_group_ids.len(), 1);
-    let thread_group = thread_group_ids[0];
+    let thread_groups = vm.top_level_thread_groups()?;
+    assert_eq!(thread_groups.len(), 1);
+    let thread_group = thread_groups.into_iter().next().unwrap();
 
-    let children = client.send(Children::new(thread_group))?;
+    let (child_groups, threads) = thread_group.children()?;
 
-    let parent_names = children
-        .child_groups
+    let parent_names = child_groups
         .iter()
-        .map(|id| {
-            let parent = client
-                .send(Parent::new(*id))?
-                .expect("Thread Group Parent was None");
-            let name = client.send(Name::new(parent))?;
-            Ok(name)
+        .map(|group| {
+            let parent = group.parent()?.expect("Thread Group Parent was None");
+            Ok(parent.name()?)
         })
         .collect::<Result<HashSet<_>>>()?;
 
-    let child_names = children
-        .child_groups
+    let child_names = child_groups
         .iter()
-        .map(|id| Ok(client.send(Name::new(*id))?))
+        .map(|group| Ok(group.name()?))
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .filter(|name| name != "InnocuousThreadGroup") // not present on jdk8
         .collect::<Vec<_>>();
 
-    let thread_names = children
-        .child_threads
+    let thread_names = threads
         .iter()
-        .map(|id| Ok(client.send(thread_reference::Name::new(*id))?))
+        .map(|thread| Ok(thread.name()?))
         .collect::<Result<Vec<_>>>()?;
 
     let expected_threads = &["Signal Dispatcher", "Reference Handler", "Finalizer"];

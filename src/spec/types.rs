@@ -1,16 +1,17 @@
-use crate::{
-    codec::{JdwpReadable, JdwpReader, JdwpWritable, JdwpWriter},
-    enums::{Tag, TypeTag},
-};
 use std::{
-    fmt::{Debug, Formatter},
+    fmt::{self, Debug},
     io::{self, Read, Write},
     ops::Deref,
 };
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+
+use crate::codec::*;
+
+use super::{ByteTag, Tag, TypeTag};
 
 pub trait JdwpId: Clone + Copy {
+    /// Type of the underlying raw ID.
     type Raw;
 
     /// Creates an instance of Self from an arbitrary number.
@@ -92,7 +93,7 @@ pub struct FrameID(u64);
 /// and the [ReferenceTypeID] are the same.
 ///
 /// A particular reference type will be identified by exactly one ID in JDWP
-/// commands and replies throughout its lifetime A [ReferenceTypeID] is not
+/// commands and replies throughout its lifetime. A [ReferenceTypeID] is not
 /// reused to identify a different reference type, regardless of whether the
 /// referenced class has been unloaded.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -115,7 +116,7 @@ macro_rules! ids {
             }
 
             impl Debug for $tpe {
-                fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                     write!(f, concat!(stringify!($tpe), "({})"), self.0)
                 }
             }
@@ -123,14 +124,14 @@ macro_rules! ids {
             impl JdwpReadable for $tpe {
                 fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
                     let id_size = read.id_sizes.$id as usize;
-                    read.read_uint::<BigEndian>(id_size).map($tpe)
+                    read.read_uint::<BE>(id_size).map($tpe)
                 }
             }
 
             impl JdwpWritable for $tpe {
                 fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
                     let id_size = write.id_sizes.$id as usize;
-                    write.write_uint::<BigEndian>(self.0, id_size)
+                    write.write_uint::<BE>(self.0, id_size)
                 }
             }
 
@@ -229,15 +230,20 @@ macro_rules! wrapper_ids {
             }
 
             impl Debug for $tpe {
-                fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                     write!(f, concat!(stringify!($tpe), "({})"), self.0.0)
+                }
+            }
+
+            impl From<$tpe> for $deref {
+                fn from(id: $tpe) -> $deref {
+                    id.0
                 }
             }
 
             impl Deref for $tpe {
                 type Target = $deref;
 
-               #[inline]
                 fn deref(&self) -> &Self::Target {
                     &self.0
                 }
@@ -275,158 +281,63 @@ wrapper_ids! {
     }
 }
 
-/// A value retrieved from the target VM.
-/// This value can be an [ObjectID] or a primitive value (1 to 8 bytes).
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Value {
-    /// a void value (no bytes)
-    Void,
-    /// a byte value (1 byte)
-    Byte(u8),
-    /// a boolean value (1 byte)
-    Boolean(bool),
-    /// a character value (2 bytes)
-    Char(u16),
-    /// a short value (2 bytes)
-    Short(i16),
-    /// an int value (4 bytes)
-    Int(i32),
-    /// a long value (8 bytes)
-    Long(i64),
-    /// a float value (4 bytes)
-    Float(f32),
-    /// a double value (8 bytes)
-    Double(f64),
-    /// an object ([ObjectID] size)
-    Object(ObjectID),
+/// An opaque type for the event request id, which is represented in JDWP docs
+/// as just a raw integer and exists only here in Rust similar to all the other
+/// IDs.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+pub struct RequestID(i32);
+
+impl JdwpId for RequestID {
+    type Raw = i32;
+
+    fn from_raw(raw: i32) -> Self {
+        Self(raw)
+    }
+
+    fn raw(self) -> i32 {
+        self.0
+    }
 }
 
-impl Value {
-    pub fn tag(self) -> Tag {
-        match self {
-            Value::Void => Tag::Void,
-            Value::Byte(_) => Tag::Byte,
-            Value::Boolean(_) => Tag::Boolean,
-            Value::Char(_) => Tag::Char,
-            Value::Short(_) => Tag::Short,
-            Value::Int(_) => Tag::Int,
-            Value::Long(_) => Tag::Long,
-            Value::Float(_) => Tag::Float,
-            Value::Double(_) => Tag::Double,
-            Value::Object(_) => Tag::Object,
+impl JdwpReadable for Option<RequestID> {
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        match i32::read(read)? {
+            0 => Ok(None),
+            x => Ok(Some(RequestID(x))),
         }
     }
 }
 
-/// A writable-only wrapper around [Value] that only writes the value itself
-/// without a tag.
-///
-/// Used in places where JDWP specifies an `untagged-value` type and expects
-/// no tag since it should be derived from context.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct UntaggedValue(pub Value);
-
-impl From<Value> for UntaggedValue {
-    fn from(value: Value) -> Self {
-        Self(value)
-    }
+/// SAFETY:
+/// T must be a #[repr(u8)] enum and all variants must have explicit
+/// discriminators that are valid tag values.
+pub(crate) unsafe fn tag<T, U: ByteTag + Copy>(e: &T) -> U {
+    *(e as *const T as *const U)
 }
 
-impl Deref for UntaggedValue {
-    type Target = Value;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl JdwpWritable for UntaggedValue {
-    fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
-        match self.0 {
-            Value::Void => Ok(()),
-            Value::Byte(v) => v.write(write),
-            Value::Boolean(v) => v.write(write),
-            Value::Char(v) => v.write(write),
-            Value::Short(v) => v.write(write),
-            Value::Int(v) => v.write(write),
-            Value::Long(v) => v.write(write),
-            Value::Float(v) => v.write(write),
-            Value::Double(v) => v.write(write),
-            Value::Object(v) => v.write(write),
-        }
-    }
-}
-
-macro_rules! tagged_jdwp_io {
-    ($enum:ident <-> $tag:ident, $($tpe:ident),* { $($read_extras:tt)* } { $($write_extras:tt)* }) => {
-        impl JdwpReadable for $enum {
-            fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-                match $tag::read(read)? {
-                    $($tag::$tpe => JdwpReadable::read(read).map(Self::$tpe),)*
-                    $($read_extras)*
-                }
-            }
-        }
-
-        impl JdwpWritable for $enum {
-            fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
-                match self {
-                    $(Self::$tpe(v) => {
-                        $tag::$tpe.write(write)?;
-                        v.write(write)
-                    },)*
-                    $($write_extras)*
-                }
-            }
-        }
-    };
-    ($($tt:tt)*) => { tagged_jdwp_io!($($tt)* {} {}); }
-}
-
-tagged_jdwp_io! {
-    Value <-> Tag,
-    Byte, Boolean, Char, Int, Short, Long, Float, Double, Object
-    {
-        Tag::Void => Ok(Value::Void),
-        _ => Err(io::Error::from(io::ErrorKind::InvalidData))
-    }
-    { Self::Void => Ok(()) }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(u8)]
 pub enum TaggedObjectID {
     /// an array object
-    Array(ArrayID),
+    Array(ArrayID) = Tag::Array as u8,
     /// an object
-    Object(ObjectID),
+    Object(ObjectID) = Tag::Object as u8,
     /// a String object
-    String(StringID),
+    String(StringID) = Tag::String as u8,
     /// a Thread object
-    Thread(ThreadID),
+    Thread(ThreadID) = Tag::Thread as u8,
     /// a ThreadGroup object
-    ThreadGroup(ThreadGroupID),
+    ThreadGroup(ThreadGroupID) = Tag::ThreadGroup as u8,
     /// a ClassLoader object
-    ClassLoader(ClassLoaderID),
+    ClassLoader(ClassLoaderID) = Tag::ClassLoader as u8,
     /// a class object object
-    ClassObject(ClassObjectID),
+    ClassObject(ClassObjectID) = Tag::ClassObject as u8,
 }
 
 impl TaggedObjectID {
-    pub fn tag(self) -> Tag {
-        use TaggedObjectID::*;
-        match self {
-            Array(_) => Tag::Array,
-            Object(_) => Tag::Object,
-            String(_) => Tag::String,
-            Thread(_) => Tag::Thread,
-            ThreadGroup(_) => Tag::ThreadGroup,
-            ClassLoader(_) => Tag::ClassLoader,
-            ClassObject(_) => Tag::ClassObject,
-        }
-    }
-
-    pub fn decompose(self) -> (Tag, ObjectID) {
-        (self.tag(), *self)
+    pub fn tag(&self) -> Tag {
+        // SAFETY: Self and Tag fulfill the requirements
+        unsafe { tag(self) }
     }
 }
 
@@ -447,41 +358,178 @@ impl Deref for TaggedObjectID {
     }
 }
 
-tagged_jdwp_io! {
-    TaggedObjectID <-> Tag,
-    Array, Object, String, Thread, ThreadGroup, ClassLoader, ClassObject
-    { _ => Err(io::Error::from(io::ErrorKind::InvalidData)) }
-    {}
+/// A tagged representation of [ReferenceTypeID], similar to how
+/// [TaggedObjectID] is a representation of the [ObjectID].
+///
+/// This construct is not separated into a separate value type in JDWP spec and
+/// exists only here in Rust, in JDWP it's usually represented by a pair of
+/// [TypeTag] and [ReferenceTypeID] values.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
+#[repr(u8)]
+pub enum TaggedReferenceTypeID {
+    /// a class reference
+    Class(ClassID) = TypeTag::Class as u8,
+    /// an interface reference
+    Interface(InterfaceID) = TypeTag::Interface as u8,
+    /// an array reference
+    Array(ArrayTypeID) = TypeTag::Array as u8,
+}
+
+impl TaggedReferenceTypeID {
+    pub fn tag(&self) -> TypeTag {
+        // SAFETY: Self and TypeTag fulfill the requirements
+        unsafe { tag(self) }
+    }
+}
+
+impl Deref for TaggedReferenceTypeID {
+    type Target = ReferenceTypeID;
+
+    fn deref(&self) -> &Self::Target {
+        use TaggedReferenceTypeID::*;
+        match self {
+            Class(id) => id,
+            Interface(id) => id,
+            Array(id) => id,
+        }
+    }
+}
+
+/// A value retrieved from the target VM.
+/// This value can be an [ObjectID] or a primitive value (1 to 8 bytes).
+#[derive(Debug, Copy, Clone, PartialEq, JdwpReadable, JdwpWritable)]
+#[repr(u8)]
+pub enum Value {
+    /// a byte value (1 byte)
+    Byte(u8) = Tag::Byte as u8,
+    /// a boolean value (1 byte)
+    Boolean(bool) = Tag::Boolean as u8,
+    /// a character value (2 bytes)
+    Char(u16) = Tag::Char as u8,
+    /// a short value (2 bytes)
+    Short(i16) = Tag::Short as u8,
+    /// an int value (4 bytes)
+    Int(i32) = Tag::Int as u8,
+    /// a long value (8 bytes)
+    Long(i64) = Tag::Long as u8,
+    /// a float value (4 bytes)
+    Float(f32) = Tag::Float as u8,
+    /// a double value (8 bytes)
+    Double(f64) = Tag::Double as u8,
+    /// an object ([ObjectID] size)
+    Object(ObjectID) = Tag::Object as u8,
+}
+
+impl Value {
+    pub fn tag(&self) -> Tag {
+        // SAFETY: Self and Tag fulfill the requirements
+        unsafe { tag(self) }
+    }
+}
+
+pub trait JdwpValue: JdwpWritable {
+    fn tagged(self) -> Value;
+}
+
+macro_rules! jvm_values {
+    ($($tpe:ty => $tagged:ident)*) => {
+        $(
+            impl JdwpValue for $tpe {
+                fn tagged(self) -> Value {
+                    Value::$tagged(self.into())
+                }
+            }
+        )*
+    };
+}
+
+jvm_values! {
+    u8 => Byte
+    bool => Boolean
+    u16 => Char
+    i16 => Short
+    i32 => Int
+    i64 => Long
+    f32 => Float
+    f64 => Double
+    ObjectID => Object
+    ThreadID => Object
+    ThreadGroupID => Object
+    StringID => Object
+    ClassLoaderID => Object
+    ClassObjectID => Object
+    ArrayID => Object
+}
+
+impl<T: JdwpValue> From<T> for Value {
+    fn from(value: T) -> Self {
+        value.tagged()
+    }
+}
+
+/// A writable-only wrapper around [Value] that only writes the value itself
+/// without a tag.
+///
+/// Used in places where JDWP specifies an `untagged-value` type and expects
+/// no tag since it should be derived from context.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct UntaggedValue(pub Value);
+
+impl From<Value> for UntaggedValue {
+    fn from(value: Value) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: JdwpValue> From<T> for UntaggedValue {
+    fn from(value: T) -> Self {
+        Self(value.tagged())
+    }
+}
+
+impl Deref for UntaggedValue {
+    type Target = Value;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl JdwpWritable for UntaggedValue {
+    fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
+        match self.0 {
+            Value::Byte(v) => v.write(write),
+            Value::Boolean(v) => v.write(write),
+            Value::Char(v) => v.write(write),
+            Value::Short(v) => v.write(write),
+            Value::Int(v) => v.write(write),
+            Value::Long(v) => v.write(write),
+            Value::Float(v) => v.write(write),
+            Value::Double(v) => v.write(write),
+            Value::Object(v) => v.write(write),
+        }
+    }
 }
 
 /// A compact representation of values used with some array operations.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, JdwpReadable, JdwpWritable)]
+#[repr(u8)]
 pub enum ArrayRegion {
-    Byte(Vec<u8>),
-    Boolean(Vec<bool>),
-    Char(Vec<u16>),
-    Short(Vec<i16>),
-    Int(Vec<i32>),
-    Long(Vec<i64>),
-    Float(Vec<f32>),
-    Double(Vec<f64>),
-    Object(Vec<TaggedObjectID>),
+    Byte(Vec<u8>) = Tag::Byte as u8,
+    Boolean(Vec<bool>) = Tag::Boolean as u8,
+    Char(Vec<u16>) = Tag::Char as u8,
+    Short(Vec<i16>) = Tag::Short as u8,
+    Int(Vec<i32>) = Tag::Int as u8,
+    Long(Vec<i64>) = Tag::Long as u8,
+    Float(Vec<f32>) = Tag::Float as u8,
+    Double(Vec<f64>) = Tag::Double as u8,
+    Object(Vec<TaggedObjectID>) = Tag::Object as u8,
 }
 
 impl ArrayRegion {
     pub fn tag(&self) -> Tag {
-        use ArrayRegion::*;
-        match self {
-            Byte(_) => Tag::Byte,
-            Boolean(_) => Tag::Boolean,
-            Char(_) => Tag::Char,
-            Short(_) => Tag::Short,
-            Int(_) => Tag::Int,
-            Long(_) => Tag::Long,
-            Float(_) => Tag::Float,
-            Double(_) => Tag::Double,
-            Object(_) => Tag::Object,
-        }
+        // SAFETY: Self and Tag fulfill the requirements
+        unsafe { tag(self) }
     }
 
     pub fn len(&self) -> usize {
@@ -513,62 +561,6 @@ impl ArrayRegion {
             Object(v) => v.is_empty(),
         }
     }
-}
-
-tagged_jdwp_io! {
-    ArrayRegion <-> Tag,
-    Byte, Boolean, Char, Short, Int, Long, Float, Double, Object
-    { _ => Err(io::Error::from(io::ErrorKind::InvalidData)) }
-    {}
-}
-
-/// A tagged representation of [ReferenceTypeID], similar to how
-/// [TaggedObjectID] is a representation of the [ObjectID].
-///
-/// This construct is not separated into a separate value type in JDWP spec and
-/// exists only here in Rust, in JDWP it's usually represented by a pair of
-/// [TypeTag] and [ReferenceTypeID] values.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum TaggedReferenceTypeID {
-    /// a class reference
-    Class(ClassID),
-    /// an interface reference
-    Interface(InterfaceID),
-    /// an array reference
-    Array(ArrayTypeID),
-}
-
-impl TaggedReferenceTypeID {
-    pub fn tag(self) -> TypeTag {
-        use TaggedReferenceTypeID::*;
-        match self {
-            Class(_) => TypeTag::Class,
-            Interface(_) => TypeTag::Interface,
-            Array(_) => TypeTag::Array,
-        }
-    }
-
-    pub fn decompose(self) -> (TypeTag, ReferenceTypeID) {
-        (self.tag(), *self)
-    }
-}
-
-impl Deref for TaggedReferenceTypeID {
-    type Target = ReferenceTypeID;
-
-    fn deref(&self) -> &Self::Target {
-        use TaggedReferenceTypeID::*;
-        match self {
-            Class(id) => &id.0,
-            Interface(id) => &id.0,
-            Array(id) => &id.0,
-        }
-    }
-}
-
-tagged_jdwp_io! {
-    TaggedReferenceTypeID <-> TypeTag,
-    Class, Interface, Array
 }
 
 /// An executable location.
@@ -605,12 +597,14 @@ impl JdwpReadable for Option<TaggedReferenceTypeID> {
     fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
         use TaggedReferenceTypeID::*;
 
-        let Some(tag) = Option::<TypeTag>::read(read)? else { return Ok(None); };
+        let Some(tag) = Option::<TypeTag>::read(read)? else {
+            return Ok(None);
+        };
         let id = ReferenceTypeID::read(read)?;
         let res = match tag {
-            TypeTag::Class => Class(ClassID(id)),
-            TypeTag::Interface => Interface(InterfaceID(id)),
-            TypeTag::Array => Array(ArrayTypeID(id)),
+            TypeTag::Class => Class(JdwpId::from_raw(id.raw())),
+            TypeTag::Interface => Interface(JdwpId::from_raw(id.raw())),
+            TypeTag::Array => Array(JdwpId::from_raw(id.raw())),
         };
         Ok(Some(res))
     }
@@ -618,7 +612,9 @@ impl JdwpReadable for Option<TaggedReferenceTypeID> {
 
 impl JdwpReadable for Option<Location> {
     fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-        let Some(reference_id) = Option::<TaggedReferenceTypeID>::read(read)? else { return Ok(None); };
+        let Some(reference_id) = Option::<TaggedReferenceTypeID>::read(read)? else {
+            return Ok(None);
+        };
         let res = Location {
             reference_id,
             method_id: JdwpReadable::read(read)?,
@@ -633,7 +629,9 @@ impl JdwpReadable for Option<Value> {
         use JdwpReadable as R;
         use Value::*;
 
-        let Some(tag) = Option::<Tag>::read(read)? else { return Ok(None); };
+        let Some(tag) = Option::<Tag>::read(read)? else {
+            return Ok(None);
+        };
         let res = match tag {
             Tag::Byte => Byte(R::read(read)?),
             Tag::Char => Char(R::read(read)?),
@@ -655,7 +653,9 @@ impl JdwpReadable for Option<TaggedObjectID> {
         use JdwpReadable as R;
         use TaggedObjectID::*;
 
-        let Some(tag) = Option::<Tag>::read(read)? else { return Ok(None); };
+        let Some(tag) = Option::<Tag>::read(read)? else {
+            return Ok(None);
+        };
         let res = match tag {
             Tag::Array => Array(R::read(read)?),
             Tag::Object => Object(R::read(read)?),
@@ -667,32 +667,6 @@ impl JdwpReadable for Option<TaggedObjectID> {
             _ => return Err(io::Error::from(io::ErrorKind::InvalidData)),
         };
         Ok(Some(res))
-    }
-}
-
-/// An opaque type for the request id, which is represented in JDWP docs as just
-/// a raw integer and exists only here in Rust similar to all the other IDs.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, JdwpReadable, JdwpWritable)]
-pub struct RequestID(i32);
-
-impl JdwpId for RequestID {
-    type Raw = i32;
-
-    fn from_raw(raw: i32) -> Self {
-        Self(raw)
-    }
-
-    fn raw(self) -> i32 {
-        self.0
-    }
-}
-
-impl JdwpReadable for Option<RequestID> {
-    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-        match i32::read(read)? {
-            0 => Ok(None),
-            x => Ok(Some(RequestID(x))),
-        }
     }
 }
 

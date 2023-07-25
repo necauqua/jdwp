@@ -3,17 +3,15 @@ use std::assert_eq;
 use common::Result;
 use jdwp::{
     client::JdwpClient,
-    commands::{
+    spec::{
         reference_type::{Methods, Signature},
-        thread_group_reference,
         thread_reference::{
             CurrentContendedMonitor, ForceEarlyReturn, FrameCount, FrameLimit, Frames, Name,
-            OwnedMonitors, OwnedMonitorsStackDepthInfo, Resume, Status, Suspend, SuspendCount,
-            ThreadGroup,
+            OwnedMonitors, OwnedMonitorsStackDepthInfo, Suspend,
         },
         virtual_machine::AllThreads,
+        TaggedReferenceTypeID, ThreadID, Value,
     },
-    types::{TaggedReferenceTypeID, ThreadID, Value},
 };
 
 mod common;
@@ -50,16 +48,16 @@ macro_rules! check_host_suspended {
 
 #[test]
 fn suspend_resume_status_and_count() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let main = get_main_thread(&mut client)?;
+    let main = vm.main_thread()?;
 
-    let suspend_count = client.send(SuspendCount::new(main))?;
+    let suspend_count = main.suspend_count()?;
     assert_eq!(suspend_count, 0);
 
-    client.send(Suspend::new(main))?;
+    main.suspend()?;
 
-    let status = client.send(Status::new(main))?;
+    let status = main.status()?;
     assert_snapshot!(status, @r###"
     (
         Sleeping,
@@ -67,19 +65,19 @@ fn suspend_resume_status_and_count() -> Result {
     )
     "###);
 
-    client.send(Suspend::new(main))?;
-    client.send(Suspend::new(main))?;
-    client.send(Suspend::new(main))?;
+    main.suspend()?;
+    main.suspend()?;
+    main.suspend()?;
 
-    let suspend_count = client.send(SuspendCount::new(main))?;
+    let suspend_count = main.suspend_count()?;
     assert_eq!(suspend_count, 4);
 
-    client.send(Resume::new(main))?;
-    client.send(Resume::new(main))?;
-    client.send(Resume::new(main))?;
-    client.send(Resume::new(main))?;
+    main.resume()?;
+    main.resume()?;
+    main.resume()?;
+    main.resume()?;
 
-    let status = client.send(Status::new(main))?;
+    let status = main.status()?;
     assert_snapshot!(status, @r###"
     (
         Sleeping,
@@ -92,13 +90,9 @@ fn suspend_resume_status_and_count() -> Result {
 
 #[test]
 fn thread_group() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
-    let main = get_main_thread(&mut client)?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let thread_group = client.send(ThreadGroup::new(main))?;
-    let name = client.send(thread_group_reference::Name::new(thread_group))?;
-
-    assert_eq!(name, "main");
+    assert_eq!(vm.main_thread()?.group()?.name()?, "main");
 
     Ok(())
 }
@@ -205,7 +199,7 @@ fn current_contended_monitor() -> Result {
     assert_snapshot!(current_contended_monitor, @r###"
     Some(
         Object(
-            [opaque_id],
+            ObjectID(opaque),
         ),
     )
     "###);

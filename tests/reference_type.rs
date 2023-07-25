@@ -1,20 +1,12 @@
-use std::{assert_eq, fmt::Debug, io::Cursor};
-
 use jdwp::{
-    client::JdwpClient,
-    codec::{JdwpReadable, JdwpWritable},
-    commands::{
-        class_object_reference::ReflectedType,
-        reference_type::{
-            ClassFileVersion, ClassLoader, ClassObject, ConstantPool, Fields, GetValues, Instances,
-            Interfaces, Methods, Modifiers, NestedTypes, Signature, SourceFile, Status,
-        },
-        virtual_machine::ClassBySignature,
-        Command,
-    },
+    highlevel::{JvmObject, ReferenceType, TaggedReferenceType, VM},
     jvm::{ConstantPoolItem, ConstantPoolValue, FieldModifiers},
-    types::{InterfaceID, ReferenceTypeID, TaggedReferenceTypeID},
+    spec::{
+        reference_type::{ClassFileVersion, ConstantPool, InstanceLimit, Methods},
+        virtual_machine::ClassBySignature,
+    },
 };
+use std::{assert_eq, error::Error, io::Cursor, ops::Deref};
 
 mod common;
 
@@ -25,59 +17,51 @@ const ARRAY_CLS: &str = "[I";
 
 const CASES: &[&str] = &[OUR_CLS, "Ljava/lang/String;", "Ljava/util/List;", ARRAY_CLS];
 
-fn get_responses<C>(
-    client: &mut JdwpClient,
-    signatures: &[&str],
-    new: fn(ReferenceTypeID) -> C,
-) -> Result<Vec<C::Output>>
-where
-    C: Command + JdwpWritable + Debug,
-    C::Output: JdwpReadable + Debug,
-{
-    signatures
-        .iter()
-        .map(|item| {
-            let (type_id, _) = *client.send(ClassBySignature::new(*item))?;
-            Ok(client.send(new(*type_id))?)
-        })
-        .collect()
+trait VmExt {
+    fn call_for_types<R, E: Error + 'static>(
+        &self,
+        signatures: &[&str],
+        call: fn(TaggedReferenceType) -> std::result::Result<R, E>,
+    ) -> Result<Vec<R>>;
 }
 
-trait GetSignature {
-    fn get_signature(&self, client: &mut JdwpClient) -> Result<String>;
-}
-
-impl GetSignature for TaggedReferenceTypeID {
-    fn get_signature(&self, client: &mut JdwpClient) -> Result<String> {
-        let sig = client.send(Signature::new(**self))?;
-        Ok(format!("{:?}({sig})", self.tag()))
+impl VmExt for VM {
+    fn call_for_types<R, E: Error + 'static>(
+        &self,
+        signatures: &[&str],
+        call: fn(TaggedReferenceType) -> std::result::Result<R, E>,
+    ) -> Result<Vec<R>> {
+        signatures
+            .iter()
+            .map(|item| Ok(call(self.class_by_signature(item)?.0)?))
+            .collect()
     }
 }
 
-impl GetSignature for InterfaceID {
-    fn get_signature(&self, client: &mut JdwpClient) -> Result<String> {
-        Ok(client.send(Signature::new(**self))?)
-    }
+trait CollExt {
+    fn signatures(self) -> Result<Vec<String>>;
 }
 
-fn get_signatures<I, S>(client: &mut JdwpClient, iterable: I) -> Result<Vec<String>>
+impl<I> CollExt for I
 where
-    S: GetSignature,
-    I: IntoIterator<Item = S>,
+    I: IntoIterator,
+    I::Item: Deref<Target = ReferenceType>,
 {
-    let mut sigs = iterable
-        .into_iter()
-        .map(|ref_id| ref_id.get_signature(client))
-        .collect::<Result<Vec<_>>>()?;
-    sigs.sort_unstable();
-    Ok(sigs)
+    fn signatures(self) -> Result<Vec<String>> {
+        let mut sigs = self
+            .into_iter()
+            .map(|ref_type| Ok(ref_type.signature()?))
+            .collect::<Result<Vec<_>>>()?;
+        sigs.sort_unstable();
+        Ok(sigs)
+    }
 }
 
 #[test]
 fn signature() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let signatures = get_responses(&mut client, CASES, Signature::new)?;
+    let signatures = vm.call_for_types(CASES, |t| t.signature())?;
 
     assert_snapshot!(signatures, @r###"
     [
@@ -92,14 +76,16 @@ fn signature() -> Result {
 
 #[test]
 fn class_loader() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let class_loaders = get_responses(&mut client, CASES, ClassLoader::new)?;
+    let class_loaders = vm.call_for_types(CASES, |t| t.class_loader())?;
 
     assert_snapshot!(class_loaders, @r###"
     [
         Some(
-            [opaque_id],
+            WrapperJvmObject(
+                ClassLoaderID(opaque),
+            ),
         ),
         None,
         None,
@@ -112,9 +98,9 @@ fn class_loader() -> Result {
 
 #[test]
 fn modifiers() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let modifiers = get_responses(&mut client, CASES, Modifiers::new)?;
+    let modifiers = vm.call_for_types(CASES, |t| t.modifiers())?;
 
     assert_snapshot!(modifiers, @r###"
     [
@@ -138,53 +124,71 @@ fn modifiers() -> Result {
 
 #[test]
 fn fields() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
-
-    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
-
-    let mut fields = client.send(Fields::new(*type_id))?;
+    let vm = common::launch_and_attach_vm("basic")?;
+    let (class_type, _) = vm.class_by_signature(OUR_CLS)?;
+    let mut fields = class_type.fields()?;
     fields.sort_by_key(|f| f.name.clone());
 
     assert_snapshot!(fields, @r###"
     [
-        Field {
-            field_id: [opaque_id],
+        StaticField {
             name: "running",
             signature: "LBasic;",
-            mod_bits: FieldModifiers(
+            generic_signature: None,
+            modifiers: FieldModifiers(
                 PUBLIC | STATIC,
             ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
+            ),
         },
-        Field {
-            field_id: [opaque_id],
+        StaticField {
             name: "secondInstance",
             signature: "LBasic;",
-            mod_bits: FieldModifiers(
+            generic_signature: None,
+            modifiers: FieldModifiers(
                 PUBLIC | STATIC,
             ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
+            ),
         },
-        Field {
-            field_id: [opaque_id],
+        StaticField {
             name: "staticInt",
             signature: "I",
-            mod_bits: FieldModifiers(
+            generic_signature: None,
+            modifiers: FieldModifiers(
                 STATIC,
             ),
-        },
-        Field {
-            field_id: [opaque_id],
-            name: "ticks",
-            signature: "J",
-            mod_bits: FieldModifiers(
-                PUBLIC,
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
             ),
         },
-        Field {
-            field_id: [opaque_id],
+        StaticField {
+            name: "ticks",
+            signature: "J",
+            generic_signature: None,
+            modifiers: FieldModifiers(
+                PUBLIC,
+            ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
+            ),
+        },
+        StaticField {
             name: "unused",
             signature: "Ljava/lang/String;",
-            mod_bits: FieldModifiers(
+            generic_signature: None,
+            modifiers: FieldModifiers(
                 FINAL,
+            ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
             ),
         },
     ]
@@ -205,7 +209,7 @@ fn methods() -> Result {
     assert_snapshot!(methods, @r###"
     [
         Method {
-            method_id: [opaque_id],
+            method_id: MethodID(opaque),
             name: "<clinit>",
             signature: "()V",
             mod_bits: MethodModifiers(
@@ -213,7 +217,7 @@ fn methods() -> Result {
             ),
         },
         Method {
-            method_id: [opaque_id],
+            method_id: MethodID(opaque),
             name: "<init>",
             signature: "()V",
             mod_bits: MethodModifiers(
@@ -221,7 +225,7 @@ fn methods() -> Result {
             ),
         },
         Method {
-            method_id: [opaque_id],
+            method_id: MethodID(opaque),
             name: "getAsInt",
             signature: "()I",
             mod_bits: MethodModifiers(
@@ -229,7 +233,7 @@ fn methods() -> Result {
             ),
         },
         Method {
-            method_id: [opaque_id],
+            method_id: MethodID(opaque),
             name: "main",
             signature: "([Ljava/lang/String;)V",
             mod_bits: MethodModifiers(
@@ -237,7 +241,7 @@ fn methods() -> Result {
             ),
         },
         Method {
-            method_id: [opaque_id],
+            method_id: MethodID(opaque),
             name: "ping",
             signature: "(Ljava/lang/Object;)V",
             mod_bits: MethodModifiers(
@@ -245,7 +249,7 @@ fn methods() -> Result {
             ),
         },
         Method {
-            method_id: [opaque_id],
+            method_id: MethodID(opaque),
             name: "tick",
             signature: "()V",
             mod_bits: MethodModifiers(
@@ -260,31 +264,29 @@ fn methods() -> Result {
 
 #[test]
 fn get_values() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
-
-    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
-
-    let mut fields = client.send(Fields::new(*type_id))?;
+    let vm = common::launch_and_attach_vm("basic")?;
+    let (class_type, _) = vm.class_by_signature(OUR_CLS)?;
+    let mut fields = class_type.fields()?;
     fields.sort_by_key(|f| f.name.clone());
 
     let fields = fields
         .into_iter()
         .filter_map(|f| {
-            f.mod_bits
+            f.modifiers
                 .contains(FieldModifiers::STATIC)
-                .then_some(f.field_id)
+                .then_some(f.id())
         })
         .collect::<Vec<_>>();
 
-    let values = client.send(GetValues::new(*type_id, fields))?;
+    let values = class_type.child(fields).get()?;
 
     assert_snapshot!(values, @r###"
     [
         Object(
-            [opaque_id],
+            ObjectID(opaque),
         ),
         Object(
-            [opaque_id],
+            ObjectID(opaque),
         ),
         Int(
             42,
@@ -297,13 +299,12 @@ fn get_values() -> Result {
 
 #[test]
 fn source_file() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let source_files = get_responses(
-        &mut client,
-        &[OUR_CLS, "Ljava/lang/String;", "Ljava/util/List;"],
-        SourceFile::new,
-    )?;
+    let source_files = vm
+        .call_for_types(&[OUR_CLS, "Ljava/lang/String;", "Ljava/util/List;"], |t| {
+            t.source_file()
+        })?;
 
     assert_snapshot!(source_files, @r###"
     [
@@ -313,8 +314,8 @@ fn source_file() -> Result {
     ]
     "###);
 
-    let (type_id, _) = *client.send(ClassBySignature::new(ARRAY_CLS))?;
-    let array_source_file = client.send(SourceFile::new(*type_id));
+    let (array_type, _) = vm.class_by_signature(ARRAY_CLS)?;
+    let array_source_file = array_type.source_file();
 
     assert_snapshot!(array_source_file, @r###"
     Err(
@@ -329,45 +330,43 @@ fn source_file() -> Result {
 
 #[test]
 fn nested_types() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
+    let (class_type, _) = vm.class_by_signature(OUR_CLS)?;
 
-    let mut nested_types = client.send(NestedTypes::new(*type_id))?;
+    let mut nested_types = class_type.nested_types()?;
     nested_types.sort_by_key(|t| t.tag() as u8);
-
-    let nested_types = get_signatures(&mut client, nested_types)?;
+    let nested_types = nested_types.signatures()?;
 
     assert_snapshot!(nested_types, @r###"
     [
-        "Class(LBasic$NestedClass;)",
-        "Interface(LBasic$NestedInterface;)",
+        "LBasic$NestedClass;",
+        "LBasic$NestedInterface;",
     ]
     "###);
 
-    let (type_id, _) = *client.send(ClassBySignature::new("Ljava/util/HashMap;"))?;
+    let (class_type, _) = vm.class_by_signature("Ljava/util/HashMap;")?;
 
-    let mut nested_types = client.send(NestedTypes::new(*type_id))?;
+    let mut nested_types = class_type.nested_types()?;
     nested_types.sort_by_key(|t| t.tag() as u8);
-
-    let nested_types = get_signatures(&mut client, nested_types)?;
+    let nested_types = nested_types.signatures()?;
 
     assert_snapshot!(nested_types, @r###"
     [
-        "Class(Ljava/util/HashMap$EntryIterator;)",
-        "Class(Ljava/util/HashMap$EntrySet;)",
-        "Class(Ljava/util/HashMap$EntrySpliterator;)",
-        "Class(Ljava/util/HashMap$HashIterator;)",
-        "Class(Ljava/util/HashMap$HashMapSpliterator;)",
-        "Class(Ljava/util/HashMap$KeyIterator;)",
-        "Class(Ljava/util/HashMap$KeySet;)",
-        "Class(Ljava/util/HashMap$KeySpliterator;)",
-        "Class(Ljava/util/HashMap$Node;)",
-        "Class(Ljava/util/HashMap$TreeNode;)",
-        "Class(Ljava/util/HashMap$UnsafeHolder;)",
-        "Class(Ljava/util/HashMap$ValueIterator;)",
-        "Class(Ljava/util/HashMap$ValueSpliterator;)",
-        "Class(Ljava/util/HashMap$Values;)",
+        "Ljava/util/HashMap$EntryIterator;",
+        "Ljava/util/HashMap$EntrySet;",
+        "Ljava/util/HashMap$EntrySpliterator;",
+        "Ljava/util/HashMap$HashIterator;",
+        "Ljava/util/HashMap$HashMapSpliterator;",
+        "Ljava/util/HashMap$KeyIterator;",
+        "Ljava/util/HashMap$KeySet;",
+        "Ljava/util/HashMap$KeySpliterator;",
+        "Ljava/util/HashMap$Node;",
+        "Ljava/util/HashMap$TreeNode;",
+        "Ljava/util/HashMap$UnsafeHolder;",
+        "Ljava/util/HashMap$ValueIterator;",
+        "Ljava/util/HashMap$ValueSpliterator;",
+        "Ljava/util/HashMap$Values;",
     ]
     "###);
 
@@ -376,9 +375,9 @@ fn nested_types() -> Result {
 
 #[test]
 fn status() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let statuses = get_responses(&mut client, CASES, Status::new)?;
+    let statuses = vm.call_for_types(CASES, |t| t.status())?;
 
     assert_snapshot!(statuses, @r###"
     [
@@ -402,11 +401,11 @@ fn status() -> Result {
 
 #[test]
 fn interfaces() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
-    let interfaces = client.send(Interfaces::new(*type_id))?;
-    let interfaces = get_signatures(&mut client, interfaces)?;
+    let (class_type, _) = vm.class_by_signature(OUR_CLS)?;
+    let interfaces = class_type.interfaces()?;
+    let interfaces = interfaces.signatures()?;
 
     assert_snapshot!(interfaces, @r###"
     [
@@ -414,10 +413,9 @@ fn interfaces() -> Result {
     ]
     "###);
 
-    let (type_id, _) = *client.send(ClassBySignature::new("Ljava/util/ArrayList;"))?;
-
-    let interfaces = client.send(Interfaces::new(*type_id))?;
-    let interfaces = get_signatures(&mut client, interfaces)?;
+    let (class_type, _) = vm.class_by_signature("Ljava/util/ArrayList;")?;
+    let interfaces = class_type.interfaces()?;
+    let interfaces = interfaces.signatures()?;
 
     assert_snapshot!(interfaces, @r###"
     [
@@ -433,32 +431,36 @@ fn interfaces() -> Result {
 
 #[test]
 fn class_object() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
-    let class_object = client.send(ClassObject::new(*type_id))?;
-    let ref_id = client.send(ReflectedType::new(class_object))?;
+    let (class_type, _) = vm.class_by_signature(OUR_CLS)?;
+    let class = class_type.class()?;
+    let class_type_2 = class.reflected_type()?;
 
-    assert_eq!(type_id, ref_id);
+    assert_eq!(class_type.id(), class_type_2.id());
 
     Ok(())
 }
 
 #[test]
 fn instances() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
-    let instances = client.send(Instances::new(*type_id, 10))?;
+    let (class_type, _) = vm.class_by_signature(OUR_CLS)?;
+    let instances = class_type.instances(InstanceLimit::limit(10))?;
 
     // the running instance and the one in the static field
     assert_snapshot!(instances, @r###"
     [
         Object(
-            [opaque_id],
+            JvmObject(
+                ObjectID(opaque),
+            ),
         ),
         Object(
-            [opaque_id],
+            JvmObject(
+                ObjectID(opaque),
+            ),
         ),
     ]
     "###);

@@ -1,9 +1,6 @@
 use std::assert_eq;
 
-use jdwp::{
-    client::ClientError,
-    commands::{string_reference::Value, thread_reference, virtual_machine::*},
-};
+use jdwp::{highlevel::JvmObject, spec::virtual_machine::*};
 
 mod common;
 
@@ -18,8 +15,8 @@ const CASES: &[&str] = &[
 
 #[test]
 fn version() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
-    let reply = client.send(Version)?;
+    let vm = common::launch_and_attach_vm("basic")?;
+    let reply = vm.version()?;
 
     let version = match common::java_version() {
         8 => (1, 8),
@@ -33,18 +30,20 @@ fn version() -> Result {
 
 #[test]
 fn class_by_signature() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
     let classes = CASES
         .iter()
-        .map(|&signature| Ok(client.send(ClassBySignature::new(signature))?.0))
+        .map(|&signature| Ok(vm.class_by_signature(signature)?))
         .collect::<Result<Vec<_>>>()?;
 
     assert_snapshot!(classes, @r###"
     [
         (
             Class(
-                [opaque_id],
+                WrapperJvmObject(
+                    ClassID(opaque),
+                ),
             ),
             ClassStatus(
                 VERIFIED | PREPARED | INITIALIZED,
@@ -52,7 +51,9 @@ fn class_by_signature() -> Result {
         ),
         (
             Interface(
-                [opaque_id],
+                WrapperJvmObject(
+                    InterfaceID(opaque),
+                ),
             ),
             ClassStatus(
                 VERIFIED | PREPARED | INITIALIZED,
@@ -60,7 +61,9 @@ fn class_by_signature() -> Result {
         ),
         (
             Array(
-                [opaque_id],
+                WrapperJvmObject(
+                    ArrayTypeID(opaque),
+                ),
             ),
             ClassStatus(
                 0x0,
@@ -68,7 +71,9 @@ fn class_by_signature() -> Result {
         ),
         (
             Array(
-                [opaque_id],
+                WrapperJvmObject(
+                    ArrayTypeID(opaque),
+                ),
             ),
             ClassStatus(
                 0x0,
@@ -82,14 +87,14 @@ fn class_by_signature() -> Result {
 
 #[test]
 fn all_classes() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let classes = client.send(AllClasses)?;
+    let classes = vm.all_classes()?;
     let mut filtered = classes
         .iter()
         .filter_map(|c| CASES.contains(&&*c.signature).then_some(c))
         .collect::<Vec<_>>();
-    filtered.sort_unstable_by_key(|c| c.signature.clone());
+    filtered.sort_unstable_by_key(|c| &c.signature);
 
     // safe to assume that more classes that those are loaded by the JVM
     assert!(classes.len() > CASES.len());
@@ -97,37 +102,49 @@ fn all_classes() -> Result {
     assert_snapshot!(filtered, @r###"
     [
         Class {
-            type_id: Class(
-                [opaque_id],
+            object: Class(
+                WrapperJvmObject(
+                    ClassID(opaque),
+                ),
             ),
             signature: "Ljava/lang/String;",
+            generic_signature: None,
             status: ClassStatus(
                 VERIFIED | PREPARED | INITIALIZED,
             ),
         },
         Class {
-            type_id: Interface(
-                [opaque_id],
+            object: Interface(
+                WrapperJvmObject(
+                    InterfaceID(opaque),
+                ),
             ),
             signature: "Ljava/util/List;",
+            generic_signature: None,
             status: ClassStatus(
                 VERIFIED | PREPARED | INITIALIZED,
             ),
         },
         Class {
-            type_id: Array(
-                [opaque_id],
+            object: Array(
+                WrapperJvmObject(
+                    ArrayTypeID(opaque),
+                ),
             ),
             signature: "[I",
+            generic_signature: None,
             status: ClassStatus(
                 0x0,
             ),
         },
         Class {
-            type_id: Array(
-                [opaque_id],
+            object: Array(
+                WrapperJvmObject(
+                    ArrayTypeID(opaque),
+                ),
             ),
             signature: "[Ljava/lang/String;",
+            generic_signature: None,
             status: ClassStatus(
                 0x0,
             ),
@@ -140,12 +157,12 @@ fn all_classes() -> Result {
 
 #[test]
 fn all_threads() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let mut thread_names = client
-        .send(AllThreads)?
+    let mut thread_names = vm
+        .all_threads()?
         .iter()
-        .map(|id| Ok(client.send(thread_reference::Name::new(*id))?))
+        .map(|thread| Ok(thread.name()?))
         .collect::<Result<Vec<_>>>()?;
 
     thread_names.sort_unstable();
@@ -165,20 +182,39 @@ fn all_threads() -> Result {
 
 #[test]
 fn dispose() -> Result {
+    let mut vm = common::launch_and_attach_vm("basic")?;
+
+    // just a smoke test I guess
+    vm.take().dispose()?;
+
+    Ok(())
+}
+
+#[test]
+fn dispose_error() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
     client.send(Dispose)?;
 
-    assert!(matches!(client.send(Version), Err(ClientError::Disposed)));
+    assert_snapshot!((client.send(Version), client.send(Version)), @r###"
+    (
+        Err(
+            Disposed,
+        ),
+        Err(
+            Disposed,
+        ),
+    )
+    "###);
 
     Ok(())
 }
 
 #[test]
 fn id_sizes() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let id_sizes = client.send(IDSizes)?;
+    let id_sizes = vm.id_sizes()?;
 
     // Everything seems to just be 64bit everywhere I test it
     assert_snapshot!(id_sizes, @r###"
@@ -196,39 +232,39 @@ fn id_sizes() -> Result {
 
 #[test]
 fn suspend_resume() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    client.send(Suspend)?;
-    client.send(Suspend)?;
-    client.send(Resume)?;
-    client.send(Resume)?;
+    // another smoke test/just coverage
+    vm.suspend()?;
+    vm.suspend()?;
+    vm.resume()?;
+    vm.resume()?;
 
     // extra resume should be a no-op
-    client.send(Resume)?;
+    vm.resume()?;
 
     Ok(())
 }
 
 #[test]
 fn exit() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let mut vm = common::launch_and_attach_vm("basic")?;
 
-    client.send(Exit::new(2))?;
+    vm.take().exit(2)?;
 
-    assert_eq!(client.jvm_process.wait()?.code(), Some(2));
+    assert_eq!(vm.jvm_process.wait()?.code(), Some(2));
 
     Ok(())
 }
 
 #[test]
 fn string_roundtrip() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let string = "this is a string";
+    let string = "this is a string with a secret: M日\u{10401}\u{7F}";
 
-    let string_id = client.send(CreateString::new(string))?;
-
-    let string_value = client.send(Value::new(*string_id))?;
+    let jvm_string = vm.create_string(string)?;
+    let string_value = jvm_string.value()?;
 
     assert_eq!(string_value, string);
 
@@ -237,9 +273,9 @@ fn string_roundtrip() -> Result {
 
 #[test]
 fn capabilities() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let capabilities = client.send(Capabilities)?;
+    let capabilities = vm.capabilities()?;
 
     // those seem to be all enabled on JDKs I test with
     assert_snapshot!(capabilities, @r###"
@@ -259,9 +295,9 @@ fn capabilities() -> Result {
 
 #[test]
 fn class_path() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let reply = client.send(ClassPaths)?;
+    let reply = vm.classpaths()?;
 
     assert!(reply
         .classpaths
@@ -273,24 +309,24 @@ fn class_path() -> Result {
 
 #[test]
 fn hold_release_events() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    client.send(HoldEvents)?;
-    client.send(HoldEvents)?;
-    client.send(ReleaseEvents)?;
-    client.send(ReleaseEvents)?;
+    vm.hold_events()?;
+    vm.hold_events()?;
+    vm.release_events()?;
+    vm.release_events()?;
 
     // extra release should be a no-op
-    client.send(ReleaseEvents)?;
+    vm.release_events()?;
 
     Ok(())
 }
 
 #[test]
 fn capabilities_new() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let capabilities = client.send(CapabilitiesNew)?;
+    let capabilities = vm.capabilities_new()?;
 
     // on JDKs I test with this seems to be the case
     assert_snapshot!(capabilities, @r###"
@@ -326,24 +362,26 @@ fn capabilities_new() -> Result {
 
 #[test]
 fn set_default_stratum() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    // atm we have nothing to test so we just check that it doesn't error
-    client.send(SetDefaultStratum::new("Not Java"))?;
+    // another smoke, test if this doesn't just error
+    vm.set_default_stratum("NotJava")?;
 
     Ok(())
 }
 
 #[test]
 fn instance_counts() -> Result {
-    let mut client = common::launch_and_attach("basic")?;
+    let vm = common::launch_and_attach_vm("basic")?;
 
-    let (type_id, _) = *client.send(ClassBySignature::new("LBasic;"))?;
-    let (type_id2, _) = *client.send(ClassBySignature::new("LBasic$NestedClass;"))?;
+    let (ref_type, _) = vm.class_by_signature("LBasic;")?;
+    let (ref_type2, _) = vm.class_by_signature("LBasic$NestedClass;")?;
 
-    let counts = client.send(InstanceCounts::new(vec![*type_id, *type_id2]))?;
+    let counts = vm.instance_counts(vec![ref_type.id(), ref_type2.id()])?;
+    let counts2 = [ref_type.instance_count()?, ref_type2.instance_count()?];
 
     assert_eq!(counts, [2, 0]);
+    assert_eq!(counts2, [2, 0]);
 
     Ok(())
 }
