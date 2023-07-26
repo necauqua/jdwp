@@ -12,11 +12,11 @@ rust-version = '1.66.1'
 [dependencies]
 jdwp-macros = { path = 'jdwp-macros' }
 paste = '1.0'
+thiserror = '1.0'
 
 log = '0.4'
 byteorder = '1.4'
 bitflags = '2.3'
-thiserror = '1.0'
 cesu8 = '1.1'
 
 [dev-dependencies]

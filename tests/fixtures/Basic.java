@@ -1,9 +1,11 @@
 import java.util.HashMap;
+import java.util.function.IntSupplier;
 
-class Basic implements Runnable {
+class Basic<T> implements IntSupplier {
 
     static int staticInt = 42;
-    public static Basic secondInstance = new Basic();
+    public static Basic<String> running = new Basic<>();
+    public static Basic<?> secondInstance = new Basic<>();
 
     public long ticks = 0;
 
@@ -14,7 +16,7 @@ class Basic implements Runnable {
     }
 
     @Override
-    public void run() {
+    public int getAsInt() {
         try {
             // make sure nested is absolutely totally surely loaded
             Class.forName("Basic$NestedClass");
@@ -31,19 +33,23 @@ class Basic implements Runnable {
         while (true) {
             tick();
             try {
-                Thread.sleep(50L);
+                Thread.sleep(500L);
             } catch (InterruptedException e) {
                 break;
             }
         }
+        return 0;
     }
 
     public static void main(String[] args) throws Exception {
-        new Basic().run();
+        System.exit(running.getAsInt());
     }
 
     private static void ping(Object ignored) {
         // noop lol
+    }
+
+    static <T extends IntSupplier> void withGeneric(int param1, T param2) {
     }
 
     class NestedClass {

@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "mitsuhiko.insta",
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "serayuzgur.crates",
+        "mkhl.direnv"
+    ]
+}

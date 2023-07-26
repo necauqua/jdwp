@@ -1,28 +1,28 @@
 use std::{
+    fmt::Debug,
     io::{self, Error, ErrorKind, Read, Write},
+    marker::PhantomData,
     ops::{Deref, DerefMut},
 };
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use paste::paste;
 
-pub use jdwp_macros::{JdwpReadable, JdwpWritable};
-
-use crate::commands::virtual_machine::IDSizeInfo;
+use crate::{functional::Coll, spec::virtual_machine::IDSizeInfo};
 
 #[derive(Debug)]
-pub struct JdwpWriter<W: Write> {
+pub struct JdwpWriter<'a, W> {
     write: W,
-    pub(crate) id_sizes: IDSizeInfo,
+    pub(crate) id_sizes: &'a IDSizeInfo,
 }
 
-impl<W: Write> JdwpWriter<W> {
-    pub(crate) fn new(write: W, id_sizes: IDSizeInfo) -> Self {
+impl<'a, W> JdwpWriter<'a, W> {
+    pub(crate) fn new(write: W, id_sizes: &'a IDSizeInfo) -> Self {
         Self { write, id_sizes }
     }
 }
 
-impl<W: Write> Deref for JdwpWriter<W> {
+impl<'a, W> Deref for JdwpWriter<'a, W> {
     type Target = W;
 
     fn deref(&self) -> &Self::Target {
@@ -30,49 +30,25 @@ impl<W: Write> Deref for JdwpWriter<W> {
     }
 }
 
-impl<W: Write> DerefMut for JdwpWriter<W> {
+impl<'a, W> DerefMut for JdwpWriter<'a, W> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.write
     }
 }
 
 #[derive(Debug)]
-pub struct JdwpReader<R: Read> {
+pub struct JdwpReader<'a, R> {
     read: R,
-    buffered_byte: Option<u8>,
-    pub(crate) id_sizes: IDSizeInfo,
+    pub(crate) id_sizes: &'a IDSizeInfo,
 }
 
-impl<R: Read> JdwpReader<R> {
-    pub(crate) fn new(read: R, id_sizes: IDSizeInfo) -> Self {
-        Self {
-            read,
-            buffered_byte: None,
-            id_sizes,
-        }
-    }
-
-    pub(crate) fn peek_u8(&mut self) -> io::Result<u8> {
-        let b = self.read.read_u8()?;
-        let prev = self.buffered_byte.replace(b);
-        assert!(prev.is_none(), "Already contained unconsumed tag byte");
-        Ok(b)
-    }
-
-    /// This wins over read_u8 from the deref-ed [Writer].
-    /// It exists to first consume the peeked byte after calling [peek_u8].
-    ///
-    /// Other read methods do not consume the buffered byte, but peek_u8
-    /// is only called before reading a tag byte.
-    pub(crate) fn read_u8(&mut self) -> io::Result<u8> {
-        match self.buffered_byte.take() {
-            Some(b) => Ok(b),
-            None => self.read.read_u8(),
-        }
+impl<'a, R> JdwpReader<'a, R> {
+    pub(crate) fn new(read: R, id_sizes: &'a IDSizeInfo) -> Self {
+        Self { read, id_sizes }
     }
 }
 
-impl<R: Read> Deref for JdwpReader<R> {
+impl<'a, R> Deref for JdwpReader<'a, R> {
     type Target = R;
 
     fn deref(&self) -> &Self::Target {
@@ -80,7 +56,7 @@ impl<R: Read> Deref for JdwpReader<R> {
     }
 }
 
-impl<R: Read> DerefMut for JdwpReader<R> {
+impl<'a, R> DerefMut for JdwpReader<'a, R> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.read
     }
@@ -90,9 +66,13 @@ pub trait JdwpReadable: Sized {
     fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self>;
 }
 
+pub use jdwp_macros::JdwpReadable;
+
 pub trait JdwpWritable {
     fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()>;
 }
+
+pub use jdwp_macros::JdwpWritable;
 
 impl JdwpReadable for () {
     #[inline]
@@ -102,6 +82,20 @@ impl JdwpReadable for () {
 }
 
 impl JdwpWritable for () {
+    #[inline]
+    fn write<W: Write>(&self, _: &mut JdwpWriter<W>) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<T> JdwpReadable for PhantomData<T> {
+    #[inline]
+    fn read<R: Read>(_: &mut JdwpReader<R>) -> io::Result<Self> {
+        Ok(PhantomData)
+    }
+}
+
+impl<T> JdwpWritable for PhantomData<T> {
     #[inline]
     fn write<W: Write>(&self, _: &mut JdwpWriter<W>) -> io::Result<()> {
         Ok(())
@@ -123,33 +117,10 @@ impl JdwpWritable for bool {
 }
 
 // read/write + i8/u8 methods do not have the endianness generic, eh
-
-impl JdwpReadable for i8 {
-    #[inline]
-    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-        read.read_i8()
-    }
-}
-
-impl JdwpWritable for i8 {
-    #[inline]
-    fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
-        write.write_i8(*self)
-    }
-}
-
-impl JdwpReadable for u8 {
-    #[inline]
-    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-        read.read_u8()
-    }
-}
-
-impl JdwpWritable for u8 {
-    #[inline]
-    fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
-        write.write_u8(*self)
-    }
+macro_rules! big_endian_hack {
+    ($f:ident, $prefix:ident, i8, $arg:tt) => { paste!($f.[<$prefix i8>] $arg) };
+    ($f:ident, $prefix:ident, u8, $arg:tt) => { paste!($f.[<$prefix u8>] $arg) };
+    ($f:ident, $prefix:ident, $t:ident, $arg:tt) => { paste!($f.[<$prefix $t>]::<BE> $arg) };
 }
 
 macro_rules! int_io {
@@ -158,59 +129,139 @@ macro_rules! int_io {
             impl JdwpReadable for $types {
                 #[inline]
                 fn read<R: Read>(reader: &mut JdwpReader<R>) -> io::Result<Self> {
-                    paste! {
-                        reader.[<read_ $types>]::<BigEndian>()
-                    }
+                    big_endian_hack!(reader, read_, $types, ())
                 }
             }
 
             impl JdwpWritable for $types {
                 #[inline]
                 fn write<W: Write>(&self, writer: &mut JdwpWriter<W>) -> io::Result<()> {
-                    paste! {
-                        writer.[<write_ $types>]::<BigEndian>(*self)
-                    }
+                    big_endian_hack!(writer, write_, $types, (*self))
                 }
             }
         )*
     };
 }
 
-int_io![i16, u16, i32, u32, i64, u64, f32, f64];
+int_io![i8, u8, i16, u16, i32, u32, i64, u64, f32, f64];
 
 impl JdwpReadable for String {
-    #[inline]
     fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
         let mut bytes = vec![0; u32::read(read)? as usize];
         read.read_exact(&mut bytes)?;
+        // surprisingly, jdwp is just utf-8, not java-cesu8
         String::from_utf8(bytes).map_err(|_| Error::from(ErrorKind::InvalidData))
     }
 }
 
-impl JdwpWritable for String {
+impl JdwpWritable for &str {
     fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
         (self.len() as u32).write(write)?;
+        // write.write_all(cesu8::to_java_cesu8(self).as_ref())
         write.write_all(self.as_bytes())
     }
 }
 
-impl<T: JdwpReadable> JdwpReadable for Vec<T> {
+// some command responses have "or an empty string if there is none of X"
+// semantic
+impl JdwpReadable for Option<String> {
     fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
-        let len = u32::read(read)?;
-        let mut res = Vec::with_capacity(len as usize);
-        for _ in 0..len {
-            res.push(T::read(read)?);
-        }
-        Ok(res)
+        String::read(read).map(|s| Some(s).filter(|s| !s.is_empty()))
     }
 }
 
-impl<T: JdwpWritable> JdwpWritable for Vec<T> {
+impl<C> JdwpReadable for C
+where
+    C: Coll + TryFrom<Vec<C::Item>>,
+    C::Item: JdwpReadable,
+{
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        let len = u32::read(read)?;
+        if let Some(static_size) = C::STATIC_SIZE {
+            if len != static_size.get() as u32 {
+                return Err(Error::from(ErrorKind::InvalidData));
+            }
+        }
+        let mut res = Vec::with_capacity(len as usize);
+        for _ in 0..len {
+            res.push(C::Item::read(read)?);
+        }
+        // SAFETY: we just checked above, so this unwrap must be a no-op
+        // `Coll` is a crate-private trait only implemented for types for which that
+        // check is sufficient
+        Ok(unsafe { res.try_into().unwrap_unchecked() })
+    }
+}
+
+impl<C> JdwpWritable for C
+where
+    C: Coll,
+    C::Item: JdwpWritable,
+{
     fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
-        (self.len() as u32).write(write)?;
-        for item in self {
+        (self.size() as u32).write(write)?;
+        for item in self.iter() {
             item.write(write)?;
         }
         Ok(())
+    }
+}
+
+// only writable to allow using slices as command arguments
+impl<T> JdwpWritable for &[T]
+where
+    T: JdwpWritable,
+{
+    fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
+        (self.len() as u32).write(write)?;
+        for item in *self {
+            item.write(write)?;
+        }
+        Ok(())
+    }
+}
+
+impl<A, B> JdwpReadable for (A, B)
+where
+    A: JdwpReadable,
+    B: JdwpReadable,
+{
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        Ok((A::read(read)?, B::read(read)?))
+    }
+}
+
+impl<A, B> JdwpWritable for (A, B)
+where
+    A: JdwpWritable,
+    B: JdwpWritable,
+{
+    fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
+        self.0.write(write)?;
+        self.1.write(write)
+    }
+}
+
+impl<A, B, C> JdwpReadable for (A, B, C)
+where
+    A: JdwpReadable,
+    B: JdwpReadable,
+    C: JdwpReadable,
+{
+    fn read<R: Read>(read: &mut JdwpReader<R>) -> io::Result<Self> {
+        Ok((A::read(read)?, B::read(read)?, C::read(read)?))
+    }
+}
+
+impl<A, B, C> JdwpWritable for (A, B, C)
+where
+    A: JdwpWritable,
+    B: JdwpWritable,
+    C: JdwpWritable,
+{
+    fn write<W: Write>(&self, write: &mut JdwpWriter<W>) -> io::Result<()> {
+        self.0.write(write)?;
+        self.1.write(write)?;
+        self.2.write(write)
     }
 }

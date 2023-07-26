@@ -1,10 +1,53 @@
+use std::collections::HashSet;
+
 use proc_macro::TokenStream;
-use quote::quote;
+
+use proc_macro2::Ident;
+use quote::{quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
+    punctuated::Punctuated,
     spanned::Spanned,
-    Data, Error, Fields, Index, ItemStruct, LitInt, PathArguments, Token, Type,
+    token::Comma,
+    Attribute, Data, Error, Fields, GenericParam, Index, LitInt, Meta, Token, Type, TypePath,
 };
+
+fn get_generic_names(generic_params: &Punctuated<GenericParam, Comma>) -> proc_macro2::TokenStream {
+    use GenericParam::*;
+
+    let generics = generic_params.iter().map(|param| match param {
+        Type(type_param) => type_param.ident.to_token_stream(),
+        Lifetime(lifetime_def) => lifetime_def.lifetime.to_token_stream(),
+        Const(const_param) => const_param.ident.to_token_stream(),
+    });
+    quote!(#(#generics,)*)
+}
+
+fn is_attr_ident(attr: &Attribute, name: &str) -> bool {
+    match &attr.meta {
+        Meta::List(list) => list.path.is_ident(name),
+        Meta::NameValue(name_value) => name_value.path.is_ident(name),
+        _ => false,
+    }
+}
+
+fn is_generic_param(
+    generic_params: &Punctuated<GenericParam, Comma>,
+    ty: &Type,
+) -> Option<TypePath> {
+    if let Type::Path(path) = ty {
+        if let Some(prefix) = path.path.segments.first() {
+            return generic_params
+                .iter()
+                .any(|param| match param {
+                    GenericParam::Type(type_param) => type_param.ident == prefix.ident,
+                    _ => false,
+                })
+                .then(|| path.clone());
+        }
+    }
+    None
+}
 
 #[proc_macro_derive(JdwpReadable, attributes(skip))]
 pub fn jdwp_readable(item: TokenStream) -> TokenStream {
@@ -12,26 +55,45 @@ pub fn jdwp_readable(item: TokenStream) -> TokenStream {
 
     match &derive_input.data {
         Data::Struct(struct_data) => {
-            let ident = derive_input.ident;
             let generic_params = derive_input.generics.params;
-            let generics_where = derive_input.generics.where_clause;
+            let mut field_types = HashSet::new();
             let read = match &struct_data.fields {
                 Fields::Unit => quote!(Ok(Self)),
                 Fields::Named(named) => {
                     let fields = named.named.iter().map(|f| {
                         let name = f.ident.as_ref().unwrap(); // we are in Named branch so this is not None
+                        if let Some(path) = is_generic_param(&generic_params, &f.ty) {
+                            field_types.insert(path);
+                        }
                         quote!(#name: ::jdwp::codec::JdwpReadable::read(read)?)
                     });
                     quote!(Ok(Self { #(#fields),* }))
                 }
                 Fields::Unnamed(unnamed) => {
-                    let fields = (0..unnamed.unnamed.len())
-                        .map(|_| quote!(::jdwp::codec::JdwpReadable::read(read)?));
+                    let fields = unnamed.unnamed.iter().map(|f| {
+                        if let Some(path) = is_generic_param(&generic_params, &f.ty) {
+                            field_types.insert(path);
+                        }
+                        quote!(::jdwp::codec::JdwpReadable::read(read)?)
+                    });
                     quote!(Ok(Self(#(#fields),*)))
                 }
             };
+
+            let mut generic_predicates = quote!();
+            if let Some(existing) = derive_input.generics.where_clause {
+                for predicate in existing.predicates {
+                    generic_predicates.extend(quote!(#predicate,));
+                }
+            }
+            for field_type in field_types {
+                generic_predicates.extend(quote!(#field_type: ::jdwp::codec::JdwpReadable,));
+            }
+
+            let ident = derive_input.ident;
+            let generic_names = get_generic_names(&generic_params);
             let tokens = quote! {
-                impl<#generic_params> ::jdwp::codec::JdwpReadable for #ident<#generic_params> #generics_where {
+                impl<#generic_params> ::jdwp::codec::JdwpReadable for #ident<#generic_names> where #generic_predicates {
                     fn read<R: ::std::io::Read>(read: &mut ::jdwp::codec::JdwpReader<R>) -> ::std::io::Result<Self> {
                         #read
                     }
@@ -39,15 +101,82 @@ pub fn jdwp_readable(item: TokenStream) -> TokenStream {
             };
             tokens.into()
         }
-        Data::Enum(enum_data) => Error::new(
-            enum_data.enum_token.span,
-            "Can derive JdwpReadable only for structs",
-        )
-        .to_compile_error()
-        .into(),
+        Data::Enum(enum_data) => {
+            let Some(repr) = derive_input
+                .attrs
+                .iter()
+                .find(|attr| is_attr_ident(attr, "repr")) else {
+                return Error::new(enum_data.enum_token.span, "No explicit repr")
+                    .to_compile_error()
+                    .into();
+            };
+            let repr = repr.parse_args::<Type>().expect("Bad repr"); // todo better error
+
+            let mut match_arms = Vec::with_capacity(enum_data.variants.len());
+            let mut field_types = HashSet::new();
+
+            let generic_params = derive_input.generics.params;
+
+            for v in &enum_data.variants {
+                let Some((_, ref d)) = v.discriminant else {
+                    return Error::new(v.span(), "No explicit discriminant")
+                        .to_compile_error()
+                        .into()
+                };
+                let name = &v.ident;
+
+                let constructor = match &v.fields {
+                    Fields::Named(named) => {
+                        let fields = named.named.iter().map(|f| {
+                            if let Some(path) = is_generic_param(&generic_params, &f.ty) {
+                                field_types.insert(path);
+                            }
+                            f.ident.as_ref().unwrap()
+                        });
+                        quote!( { #(#fields: ::jdwp::codec::JdwpReadable::read(read)?,)* } )
+                    }
+                    Fields::Unnamed(unnamed) => {
+                        let fields = unnamed.unnamed.iter().map(|f| {
+                            if let Some(path) = is_generic_param(&generic_params, &f.ty) {
+                                field_types.insert(path);
+                            }
+                            quote!(::jdwp::codec::JdwpReadable::read(read)?)
+                        });
+                        quote!( ( #(#fields),* ) )
+                    }
+                    Fields::Unit => quote!(),
+                };
+                match_arms.push(quote!(x if x == (#d) => Self::#name #constructor));
+            }
+
+            let mut generic_predicates = quote!();
+            if let Some(existing) = derive_input.generics.where_clause {
+                for predicate in existing.predicates {
+                    generic_predicates.extend(quote!(#predicate,));
+                }
+            }
+            for field_type in field_types {
+                generic_predicates.extend(quote!(#field_type: ::jdwp::codec::JdwpReadable,));
+            }
+
+            let ident = derive_input.ident;
+            let generic_names = get_generic_names(&generic_params);
+            let tokens = quote! {
+                impl<#generic_params> ::jdwp::codec::JdwpReadable for #ident<#generic_names> where #generic_predicates {
+                    fn read<R: ::std::io::Read>(read: &mut ::jdwp::codec::JdwpReader<R>) -> ::std::io::Result<Self> {
+                        let res = match #repr::read(read)? {
+                            #(#match_arms,)*
+                            _ => return Err(::std::io::Error::from(::std::io::ErrorKind::InvalidData)),
+                        };
+                        Ok(res)
+                    }
+                }
+            };
+            tokens.into()
+        }
         Data::Union(union_data) => Error::new(
             union_data.union_token.span,
-            "Can derive JdwpReadable only for structs",
+            "Can derive JdwpReadable only for structs and enums with explicit discriminants",
         )
         .to_compile_error()
         .into(),
@@ -60,9 +189,6 @@ pub fn jdwp_writable(item: TokenStream) -> TokenStream {
 
     match &derive_input.data {
         Data::Struct(struct_data) => {
-            let ident = derive_input.ident;
-            let generic_params = derive_input.generics.params;
-            let generics_where = derive_input.generics.where_clause;
             let write = match &struct_data.fields {
                 Fields::Unit => quote!(),
                 Fields::Named(named) => {
@@ -80,8 +206,12 @@ pub fn jdwp_writable(item: TokenStream) -> TokenStream {
                     quote!(#(#fields;)*)
                 }
             };
+            let ident = derive_input.ident;
+            let generic_params = derive_input.generics.params;
+            let generic_names = get_generic_names(&generic_params);
+            let generics_where = derive_input.generics.where_clause;
             let tokens = quote! {
-                impl<#generic_params> ::jdwp::codec::JdwpWritable for #ident<#generic_params> #generics_where {
+                impl<#generic_params> ::jdwp::codec::JdwpWritable for #ident<#generic_names> #generics_where {
                     fn write<W: ::std::io::Write>(&self, write: &mut ::jdwp::codec::JdwpWriter<W>) -> ::std::io::Result<()> {
                         #write
                         Ok(())
@@ -90,15 +220,75 @@ pub fn jdwp_writable(item: TokenStream) -> TokenStream {
             };
             tokens.into()
         }
-        Data::Enum(enum_data) => Error::new(
-            enum_data.enum_token.span,
-            "Can derive JdwpWritable only for structs",
-        )
-        .to_compile_error()
-        .into(),
+        Data::Enum(enum_data) => {
+            let Some(repr) = derive_input
+                .attrs
+                .iter()
+                .find(|attr| is_attr_ident(attr, "repr")) else {
+                return Error::new(enum_data.enum_token.span, "No explicit repr")
+                    .to_compile_error()
+                    .into();
+            };
+            let repr = repr.parse_args::<Type>().expect("TODO");
+
+            let mut match_arms = Vec::with_capacity(enum_data.variants.len());
+
+            for v in &enum_data.variants {
+                let Some((_, ref d)) = v.discriminant else {
+                    return Error::new(
+                        v.span(),
+                        "No explicit discriminant",
+                    )
+                    .to_compile_error()
+                    .into()
+                };
+
+                let (destruct, writes) = match &v.fields {
+                    Fields::Named(named) => {
+                        let names = named
+                            .named
+                            .iter()
+                            .map(|f| f.ident.as_ref().unwrap())
+                            .collect::<Vec<_>>();
+                        (quote!({ #(#names),* }), quote!(#(#names.write(write)?;)*))
+                    }
+                    Fields::Unnamed(unnamed) => {
+                        let names = (0..unnamed.unnamed.len())
+                            .map(|i| Ident::new(&format!("case_{i}"), unnamed.span()))
+                            .collect::<Vec<_>>();
+                        (quote!((#(#names),*)), quote!(#(#names.write(write)?;)*))
+                    }
+                    Fields::Unit => (quote!(), quote!()),
+                };
+
+                let name = &v.ident;
+
+                match_arms.push(quote! {
+                    Self::#name #destruct => {
+                        #repr::write(&(#d), write)?;
+                        #writes
+                    }
+                });
+            }
+            let ident = derive_input.ident;
+            let generic_params = derive_input.generics.params;
+            let generic_names = get_generic_names(&generic_params);
+            let generics_where = derive_input.generics.where_clause;
+            let tokens = quote! {
+                impl<#generic_params> ::jdwp::codec::JdwpWritable for #ident<#generic_names> #generics_where {
+                    fn write<W: ::std::io::Write>(&self, write: &mut ::jdwp::codec::JdwpWriter<W>) -> ::std::io::Result<()> {
+                        match self {
+                            #(#match_arms)*
+                        }
+                        Ok(())
+                    }
+                }
+            };
+            tokens.into()
+        }
         Data::Union(union_data) => Error::new(
             union_data.union_token.span,
-            "Can derive JdwpWritable only for structs",
+            "Can derive JdwpWritable only for structs and enums with explicit discriminants",
         )
         .to_compile_error()
         .into(),
@@ -113,7 +303,7 @@ struct CommandAttr {
 impl Parse for CommandAttr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let reply_type = input.parse()?;
-        let _ = input.parse::<Token![,]>()?;
+        _ = input.parse::<Token![,]>()?;
         Ok(CommandAttr {
             reply_type,
             command: input.parse()?,
@@ -138,7 +328,7 @@ impl ShortCommandAttr {
 impl Parse for ShortCommandAttr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let command_set = input.parse()?;
-        let _ = input.parse::<Token![,]>()?;
+        _ = input.parse::<Token![,]>()?;
         Ok(ShortCommandAttr {
             command_set,
             command_id: input.parse()?,
@@ -166,10 +356,12 @@ pub fn jdwp_command(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let ident = &item.ident;
+    let generic_params = &item.generics.params;
+    let generic_names = get_generic_names(generic_params);
+    let generics_where = &item.generics.where_clause;
 
-    let new = if item.fields.is_empty() {
-        quote!()
-    } else {
+    let new = if !item.fields.is_empty() {
+        let mut docs = Vec::with_capacity(item.fields.len());
         let mut typed_idents = Vec::with_capacity(item.fields.len());
         let mut idents = Vec::with_capacity(item.fields.len());
         for f in &item.fields {
@@ -177,16 +369,29 @@ pub fn jdwp_command(attr: TokenStream, item: TokenStream) -> TokenStream {
                 Some(ref ident) => {
                     let ty = &f.ty;
 
-                    // this is very cringe but also very simple
-                    let string_magic = quote!(#ty).to_string() == "String";
+                    // this is pretty cringe but eh
+                    let phantom = quote!(#ty).to_string().starts_with("PhantomData ");
 
-                    typed_idents.push(if string_magic {
-                        quote!(#ident: impl Into<String>)
-                    } else {
-                        quote!(#ident: #ty)
-                    });
-                    idents.push(if string_magic {
-                        quote!(#ident: #ident.into())
+                    if !phantom {
+                        typed_idents.push(quote!(#ident: #ty));
+                    }
+
+                    docs.push(
+                        f.attrs
+                            .iter()
+                            .find(|attr| is_attr_ident(attr, "doc"))
+                            .map(|attr| {
+                                quote! {
+                                    #[doc = stringify!(#ident)]
+                                    #[doc = " - "]
+                                    #attr
+                                    #[doc = "\n"]
+                                }
+                            }),
+                    );
+
+                    idents.push(if phantom {
+                        quote!(#ident: ::std::marker::PhantomData)
                     } else {
                         quote!(#ident)
                     });
@@ -198,59 +403,28 @@ pub fn jdwp_command(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             }
         }
-        let of = try_generate_of_constructor(&item);
         quote! {
-            impl #ident {
+            impl<#generic_params> #ident<#generic_names> #generics_where {
                 /// Autogenerated constructor to create the command
+                /// ### Arguments:
+                #(#docs)*
                 pub fn new(#(#typed_idents,)*) -> Self {
                     Self { #(#idents,)* }
                 }
-                #of
             }
         }
+    } else {
+        quote!()
     };
 
     let tokens = quote! {
         #item
-
         #new
 
-        impl ::jdwp::commands::Command for #ident {
-            const ID: ::jdwp::CommandId = ::jdwp::CommandId::new(#command_set, #command_id);
+        impl<#generic_params> ::jdwp::spec::Command for #ident<#generic_names> #generics_where {
+            const ID: ::jdwp::spec::CommandId = ::jdwp::spec::CommandId::new(#command_set, #command_id);
             type Output = #reply_type;
         }
     };
     tokens.into()
-}
-
-fn try_generate_of_constructor(item: &ItemStruct) -> proc_macro2::TokenStream {
-    let field = &match item.fields {
-        Fields::Named(ref named) => &named.named[0],
-        Fields::Unnamed(ref unnamed) => &unnamed.unnamed[0],
-        _ => unreachable!(),
-    };
-
-    match &field.ty {
-        Type::Path(tp) => {
-            if tp.path.segments.len() == 1 {
-                let first = &tp.path.segments[0];
-                let vec = &first.ident;
-                if vec.to_string() == "Vec" {
-                    if let PathArguments::AngleBracketed(args) = &first.arguments {
-                        let f_ident = &field.ident;
-                        let tpe = &args.args[0];
-                        return quote! {
-                            /// Autogenerated shortcut to create a command with a single value in the list
-                            pub fn of(single: #tpe) -> Self {
-                                Self { #f_ident: vec![single] }
-                            }
-                        };
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
-
-    quote!()
 }

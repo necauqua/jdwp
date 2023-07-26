@@ -1,12 +1,13 @@
-use crate::{JdwpReadable, JdwpReader, JdwpWritable, JdwpWriter};
+use crate::codec::{JdwpReadable, JdwpReader, JdwpWritable, JdwpWriter};
 use bitflags::bitflags;
 use std::{
+    borrow::Cow,
     io::{self, Read, Write},
     rc::Rc,
 };
 use thiserror::Error;
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{ReadBytesExt, BE};
 
 /// This represents an item in the constant pool table.
 #[repr(u8)]
@@ -108,68 +109,77 @@ impl ConstantPoolItem {
         let tag = read.read_u8()?;
         let item = match tag {
             1 => {
-                let length = read.read_u16::<BigEndian>()?;
+                let length = read.read_u16::<BE>()?;
                 let mut bytes = vec![0; length as usize];
                 read.read_exact(&mut bytes)?;
 
-                let string = cesu8::from_java_cesu8(&bytes)
+                let cow = cesu8::from_java_cesu8(&bytes)
                     .map_err(|_| ConstantPoolParsingError::BadUtf8 { index })?;
-                ConstantPoolItem::Utf8(string.into_owned())
+
+                ConstantPoolItem::Utf8(match cow {
+                    Cow::Borrowed(_) => {
+                        // SAFETY: from_cesu8 only returns borrowed if input was valid utf-8
+                        // so we just reinterpret to avoid the clone in Cow::into_owned
+                        // Maybe I should make a PR to add this to cesu8?
+                        unsafe { String::from_utf8_unchecked(bytes) }
+                    }
+                    Cow::Owned(s) => s,
+                })
             }
-            3 => ConstantPoolItem::Integer(read.read_i32::<BigEndian>()?),
-            4 => ConstantPoolItem::Float(read.read_f32::<BigEndian>()?),
-            5 => ConstantPoolItem::Long(read.read_i64::<BigEndian>()?),
-            6 => ConstantPoolItem::Double(read.read_f64::<BigEndian>()?),
-            7 => ConstantPoolItem::Class(read.read_u16::<BigEndian>()?),
-            8 => ConstantPoolItem::String(read.read_u16::<BigEndian>()?),
+            3 => ConstantPoolItem::Integer(read.read_i32::<BE>()?),
+            4 => ConstantPoolItem::Float(read.read_f32::<BE>()?),
+            5 => ConstantPoolItem::Long(read.read_i64::<BE>()?),
+            6 => ConstantPoolItem::Double(read.read_f64::<BE>()?),
+            7 => ConstantPoolItem::Class(read.read_u16::<BE>()?),
+            8 => ConstantPoolItem::String(read.read_u16::<BE>()?),
             9 => ConstantPoolItem::Fieldref {
-                class_index: read.read_u16::<BigEndian>()?,
-                name_and_type_index: read.read_u16::<BigEndian>()?,
+                class_index: read.read_u16::<BE>()?,
+                name_and_type_index: read.read_u16::<BE>()?,
             },
             10 => ConstantPoolItem::Methodref {
-                class_index: read.read_u16::<BigEndian>()?,
-                name_and_type_index: read.read_u16::<BigEndian>()?,
+                class_index: read.read_u16::<BE>()?,
+                name_and_type_index: read.read_u16::<BE>()?,
             },
             11 => ConstantPoolItem::InterfaceMethodref {
-                class_index: read.read_u16::<BigEndian>()?,
-                name_and_type_index: read.read_u16::<BigEndian>()?,
+                class_index: read.read_u16::<BE>()?,
+                name_and_type_index: read.read_u16::<BE>()?,
             },
             12 => ConstantPoolItem::NameAndType {
-                name_index: read.read_u16::<BigEndian>()?,
-                descriptor_index: read.read_u16::<BigEndian>()?,
+                name_index: read.read_u16::<BE>()?,
+                descriptor_index: read.read_u16::<BE>()?,
             },
             15 => {
                 use ReferenceKind::*;
 
-                let kind = read.read_u8()?;
-                let reference_kind = match kind {
-                    1 => GetField,
-                    2 => GetStatic,
-                    3 => PutField,
-                    4 => PutStatic,
-                    5 => InvokeVirtual,
-                    6 => InvokeStatic,
-                    7 => InvokeSpecial,
-                    8 => NewInvokeSpecial,
-                    9 => InvokeInterface,
-                    _ => return Err(ConstantPoolParsingError::BadReferenceKind { kind, index }),
-                };
                 ConstantPoolItem::MethodHandle {
-                    reference_kind,
-                    reference_index: read.read_u16::<BigEndian>()?,
+                    reference_kind: match read.read_u8()? {
+                        1 => GetField,
+                        2 => GetStatic,
+                        3 => PutField,
+                        4 => PutStatic,
+                        5 => InvokeVirtual,
+                        6 => InvokeStatic,
+                        7 => InvokeSpecial,
+                        8 => NewInvokeSpecial,
+                        9 => InvokeInterface,
+                        kind => {
+                            return Err(ConstantPoolParsingError::BadReferenceKind { kind, index })
+                        }
+                    },
+                    reference_index: read.read_u16::<BE>()?,
                 }
             }
-            16 => ConstantPoolItem::MethodType(read.read_u16::<BigEndian>()?),
+            16 => ConstantPoolItem::MethodType(read.read_u16::<BE>()?),
             17 => ConstantPoolItem::Dynamic {
-                bootstrap_method_attr_index: read.read_u16::<BigEndian>()?,
-                name_and_type_index: read.read_u16::<BigEndian>()?,
+                bootstrap_method_attr_index: read.read_u16::<BE>()?,
+                name_and_type_index: read.read_u16::<BE>()?,
             },
             18 => ConstantPoolItem::InvokeDynamic {
-                bootstrap_method_attr_index: read.read_u16::<BigEndian>()?,
-                name_and_type_index: read.read_u16::<BigEndian>()?,
+                bootstrap_method_attr_index: read.read_u16::<BE>()?,
+                name_and_type_index: read.read_u16::<BE>()?,
             },
-            19 => ConstantPoolItem::Module(read.read_u16::<BigEndian>()?),
-            20 => ConstantPoolItem::Package(read.read_u16::<BigEndian>()?),
+            19 => ConstantPoolItem::Module(read.read_u16::<BE>()?),
+            20 => ConstantPoolItem::Package(read.read_u16::<BE>()?),
             _ => return Err(ConstantPoolParsingError::BadTag { tag, index }),
         };
         Ok(item)

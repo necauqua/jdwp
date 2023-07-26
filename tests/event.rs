@@ -1,20 +1,44 @@
-use jdwp::{
-    commands::{
-        event::Event, event_request, reference_type::Fields, virtual_machine::ClassesBySignature,
-    },
-    enums::{EventKind, SuspendPolicy},
-    types::{FieldOnly, Modifier, Value},
+use jdwp::spec::{
+    event::Event,
+    event_request::{Clear, Modifier, Set},
+    reference_type::{Fields, Methods},
+    thread_reference,
+    virtual_machine::{AllThreads, ClassBySignature},
+    EventKind, SuspendPolicy, Value,
 };
 
 mod common;
 
 use common::Result;
 
+// #[test]
+// fn field_modification_new() -> Result {
+//     let vm = common::launch_and_attach_vm("basic")?;
+
+//     let (ref_type, _) = vm.class_by_signature("LBasic;")?;
+
+//     let main_thread = vm.main_thread()?;
+//     let ticks = ref_type.field("ticks")?;
+//     // let tick = ref_type.method("tick")?;
+
+//     Ok(())
+// }
+
 #[test]
 fn field_modification() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
-    let type_id = client.send(ClassesBySignature::new("LBasic;"))?[0].type_id;
+    let (type_id, _) = *client.send(ClassBySignature::new("LBasic;"))?;
+
+    let main_thread = client
+        .send(AllThreads)?
+        .into_iter()
+        .map(|id| Ok((id, client.send(thread_reference::Name::new(id))?)))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .find(|(_, name)| name == "main")
+        .unwrap()
+        .0;
 
     let ticks = &client
         .send(Fields::new(*type_id))?
@@ -22,38 +46,45 @@ fn field_modification() -> Result {
         .find(|f| f.name == "ticks")
         .unwrap();
 
-    let request_id = client.send(event_request::Set::new(
+    let tick = &client
+        .send(Methods::new(*type_id))?
+        .into_iter()
+        .find(|m| m.name == "tick")
+        .unwrap();
+
+    let field_only = Modifier::FieldOnly(*type_id, ticks.field_id);
+
+    let request_id = client.send(Set::new(
         EventKind::FieldModification,
         SuspendPolicy::None,
-        vec![Modifier::FieldOnly(FieldOnly {
-            declaring: *type_id,
-            field_id: ticks.field_id,
-        })],
+        &[field_only],
     ))?;
 
-    match &client.host_events().recv()?.events[..] {
-        [Event::FieldModification(field_modification)] => {
-            assert_eq!(field_modification.request_id, request_id);
+    match &client.receive_events().recv()?.events[..] {
+        [Event::FieldModification(req_id, tid, loc, (rid, fid, oid), v)] => {
+            assert_eq!(*req_id, request_id);
 
-            // not sure if the main thread is always 1
-            // assert_eq!(field_modification.thread, unsafe { ThreadID::new(1) });
+            // should be modified in main thread
+            assert_eq!(*tid, main_thread);
 
-            // should be modified from own class
-            assert_eq!(field_modification.ref_type_id, type_id);
-            assert_eq!(field_modification.field_id, ticks.field_id);
+            // is our field
+            assert_eq!((*rid, *fid), (type_id, ticks.field_id));
+
+            // modified from our class
+            assert_eq!(loc.reference_id, type_id);
+            // from the tick method
+            assert_eq!(loc.method_id, tick.method_id);
+
             // field is non-static
-            assert!(field_modification.object.is_some());
+            assert!(oid.is_some());
 
             // check if it was a long and if it did tick
-            assert!(matches!(field_modification.value, Value::Long(x) if x >= 1));
+            assert!(matches!(*v, Value::Long(x) if x >= 1));
         }
         e => panic!("Unexpected event set received: {:#?}", e),
     }
 
-    client.send(event_request::Clear::new(
-        EventKind::FieldModification,
-        request_id,
-    ))?;
+    client.send(Clear::new(EventKind::FieldModification, request_id))?;
 
     Ok(())
 }

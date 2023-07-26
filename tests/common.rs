@@ -1,5 +1,6 @@
 use std::{
     error::Error,
+    fmt::Debug,
     format,
     io::{BufRead, BufReader, ErrorKind},
     net::TcpListener,
@@ -7,33 +8,42 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
-use jdwp::client::JdwpClient;
+use jdwp::{client::JdwpClient, highlevel::VM};
 use lazy_static::lazy_static;
 
 pub type Result<T = ()> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Debug)]
-pub struct JvmHandle {
-    jdwp_client: JdwpClient,
+pub struct JvmHandle<T> {
     pub jvm_process: Child,
     port: u16,
+    value: Option<T>,
 }
 
-impl Deref for JvmHandle {
-    type Target = JdwpClient;
+impl<T> JvmHandle<T> {
+    // only used in the vm exit test where the vm is taken by value
+    // but other tests including the common value flag this as unused
+    #[allow(unused)]
+    pub fn take(&mut self) -> T {
+        self.value.take().expect("Value was moved out")
+    }
+}
+
+impl<T> Deref for JvmHandle<T> {
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.jdwp_client
+        self.value.as_ref().expect("Value was moved out")
     }
 }
 
-impl DerefMut for JvmHandle {
+impl<T> DerefMut for JvmHandle<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.jdwp_client
+        self.value.as_mut().expect("Value was moved out")
     }
 }
 
-impl Drop for JvmHandle {
+impl<T> Drop for JvmHandle<T> {
     fn drop(&mut self) {
         match self.jvm_process.kill() {
             Ok(_) => {}
@@ -102,7 +112,7 @@ fn ensure_fixture_is_compiled(fixture: &str) -> Result<(String, String)> {
     Ok((dir, capitalized))
 }
 
-pub fn launch_and_attach(fixture: &str) -> Result<JvmHandle> {
+fn launch(fixture: &str) -> Result<(Child, u16)> {
     // ensure the logger was init
     let _ = env_logger::builder()
         .is_test(true)
@@ -112,12 +122,11 @@ pub fn launch_and_attach(fixture: &str) -> Result<JvmHandle> {
     let (classpath, class_name) = ensure_fixture_is_compiled(fixture)?;
 
     let port = TcpListener::bind(("localhost", 0))?.local_addr()?.port();
-    log::info!("Starting a JVM with JDWP port: {}", port);
+    log::info!("Starting a JVM with JDWP port: {port}");
 
     let mut jvm_process = Command::new("java")
         .arg(format!(
-            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address={}",
-            port
+            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address={port}",
         ))
         .args(["-cp", &classpath, &class_name])
         .stdout(Stdio::piped())
@@ -136,12 +145,29 @@ pub fn launch_and_attach(fixture: &str) -> Result<JvmHandle> {
     // "up" is printed by the java fixture class
     assert_eq!(stdout.next().unwrap()?, "up");
 
-    let jdwp_client = JdwpClient::attach(("localhost", port)).expect("Can't connect to the JVM");
+    Ok((jvm_process, port))
+}
 
+#[allow(unused)] // it's flagged as unused in test binaries that don't use it ¯\_(ツ)_/¯
+pub fn launch_and_attach(fixture: &str) -> Result<JvmHandle<JdwpClient>> {
+    let (jvm_process, port) = launch(fixture)?;
+    let client = JdwpClient::connect(("localhost", port)).expect("Can't connect to the JVM");
     Ok(JvmHandle {
-        jdwp_client,
         jvm_process,
         port,
+        value: Some(client),
+    })
+}
+
+#[allow(unused)] // ditto
+pub fn launch_and_attach_vm(fixture: &str) -> Result<JvmHandle<VM>> {
+    let (jvm_process, port) = launch(fixture)?;
+    let vm = VM::connect(("localhost", port)).expect("Can't connect to the JVM");
+
+    Ok(JvmHandle {
+        jvm_process,
+        port,
+        value: Some(vm),
     })
 }
 
@@ -178,33 +204,10 @@ macro_rules! assert_snapshot {
     ($e:expr, @$lit:literal) => {
         insta::with_settings!({
             filters => vec![
-                (r"(?:ClassLoader|Field|Method|Object|Class|Interface|ArrayType)ID\(\d+\)", "[opaque_id]"),
+                (r"((?:ClassLoader|Field|Method|Object|Class|Interface|ArrayType)ID)\(\d+\)", "$1(opaque)"),
             ]
         }, {
             insta::assert_debug_snapshot!($e, @$lit);
         });
     };
-}
-
-pub trait TryMapExt<T> {
-    fn try_map<E, F, U, M>(self, f: F) -> std::result::Result<Vec<U>, E>
-    where
-        F: FnMut(T) -> std::result::Result<U, M>,
-        E: From<M>;
-}
-
-impl<T, I> TryMapExt<T> for I
-where
-    I: IntoIterator<Item = T>,
-{
-    fn try_map<E, F, U, M>(self, mut f: F) -> std::result::Result<Vec<U>, E>
-    where
-        F: FnMut(T) -> std::result::Result<U, M>,
-        E: From<M>,
-    {
-        self.into_iter().try_fold(Vec::new(), move |mut acc, item| {
-            acc.push(f(item)?);
-            Ok(acc)
-        })
-    }
 }
