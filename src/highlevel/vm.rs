@@ -162,7 +162,7 @@ impl VM {
             .send(virtual_machine::SetDefaultStratum::new(stratum))
     }
 
-    pub fn all_classes_with_generic(&self) -> Result<Vec<Class>, ClientError> {
+    pub fn all_classes_generic(&self) -> Result<Vec<Class>, ClientError> {
         let classes = self.client.get().send(AllClassesWithGeneric)?;
         let classes = classes
             .into_iter()

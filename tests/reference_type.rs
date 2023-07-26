@@ -2,7 +2,9 @@ use jdwp::{
     highlevel::{JvmObject, ReferenceType, TaggedReferenceType, VM},
     jvm::{ConstantPoolItem, ConstantPoolValue, FieldModifiers},
     spec::{
-        reference_type::{ClassFileVersion, ConstantPool, InstanceLimit, Methods},
+        reference_type::{
+            ClassFileVersion, ConstantPool, InstanceLimit, Methods, MethodsWithGeneric,
+        },
         virtual_machine::ClassBySignature,
     },
 };
@@ -75,6 +77,52 @@ fn signature() -> Result {
 }
 
 #[test]
+fn signature_generic() -> Result {
+    let vm = common::launch_and_attach_vm("basic")?;
+
+    // String has extra interfaces in java 17
+    let signatures = vm.call_for_types(&[OUR_CLS, "Ljava/util/List;", ARRAY_CLS], |t| {
+        t.signature_generic()
+    })?;
+
+    assert_snapshot!(signatures, @r###"
+    [
+        SignatureWithGenericReply {
+            signature: "LBasic;",
+            generic_signature: "<T:Ljava/lang/Object;>Ljava/lang/Object;Ljava/util/function/IntSupplier;",
+        },
+        SignatureWithGenericReply {
+            signature: "Ljava/util/List;",
+            generic_signature: "<E:Ljava/lang/Object;>Ljava/lang/Object;Ljava/util/Collection<TE;>;",
+        },
+        SignatureWithGenericReply {
+            signature: "[I",
+            generic_signature: "",
+        },
+    ]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn source_debug_extension() -> Result {
+    let vm = common::launch_and_attach_vm("basic")?;
+
+    let result = vm.class_by_signature(OUR_CLS)?.0.source_debug_extension();
+
+    assert_snapshot!(result, @r###"
+    Err(
+        HostError(
+            AbsentInformation,
+        ),
+    )
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn class_loader() -> Result {
     let vm = common::launch_and_attach_vm("basic")?;
 
@@ -92,6 +140,37 @@ fn class_loader() -> Result {
         None,
     ]
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn visible_classes() -> Result {
+    let vm = common::launch_and_attach_vm("basic")?;
+
+    let (ref_type, _) = vm.class_by_signature(OUR_CLS)?;
+    let class_loader = ref_type.class_loader()?.unwrap();
+
+    let visible_classes = class_loader.visible_classes()?;
+
+    let signatures = visible_classes
+        .iter()
+        .map(|c| Ok(c.signature()?))
+        .collect::<Result<Vec<_>>>()?;
+
+    const EXPECTED: &[&str] = &[
+        OUR_CLS,
+        "LBasic$NestedInterface;",
+        "Ljava/lang/Class;",
+        "Ljava/lang/ClassLoader;",
+        "Ljava/lang/Thread;",
+        "Ljava/lang/System;",
+    ];
+
+    assert!(
+        signatures.iter().any(|s| EXPECTED.contains(&&**s)),
+        "Visible classes don't contain our expected subset"
+    );
 
     Ok(())
 }
@@ -136,7 +215,7 @@ fn fields() -> Result {
             signature: "LBasic;",
             generic_signature: None,
             modifiers: FieldModifiers(
-                PUBLIC | STATIC,
+                PUBLIC | STATIC | 0x800,
             ),
             object: NestedJvmObject(
                 ReferenceTypeID(2),
@@ -148,7 +227,86 @@ fn fields() -> Result {
             signature: "LBasic;",
             generic_signature: None,
             modifiers: FieldModifiers(
-                PUBLIC | STATIC,
+                PUBLIC | STATIC | 0x800,
+            ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
+            ),
+        },
+        StaticField {
+            name: "staticInt",
+            signature: "I",
+            generic_signature: None,
+            modifiers: FieldModifiers(
+                STATIC,
+            ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
+            ),
+        },
+        StaticField {
+            name: "ticks",
+            signature: "J",
+            generic_signature: None,
+            modifiers: FieldModifiers(
+                PUBLIC,
+            ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
+            ),
+        },
+        StaticField {
+            name: "unused",
+            signature: "Ljava/lang/String;",
+            generic_signature: None,
+            modifiers: FieldModifiers(
+                FINAL,
+            ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
+            ),
+        },
+    ]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn fields_generic() -> Result {
+    let vm = common::launch_and_attach_vm("basic")?;
+    let (class_type, _) = vm.class_by_signature(OUR_CLS)?;
+    let mut fields = class_type.fields_generic()?;
+    fields.sort_by_key(|f| f.name.clone());
+
+    assert_snapshot!(fields, @r###"
+    [
+        StaticField {
+            name: "running",
+            signature: "LBasic;",
+            generic_signature: Some(
+                "LBasic<Ljava/lang/String;>;",
+            ),
+            modifiers: FieldModifiers(
+                PUBLIC | STATIC | 0x800,
+            ),
+            object: NestedJvmObject(
+                ReferenceTypeID(2),
+                FieldID(opaque),
+            ),
+        },
+        StaticField {
+            name: "secondInstance",
+            signature: "LBasic;",
+            generic_signature: Some(
+                "LBasic<*>;",
+            ),
+            modifiers: FieldModifiers(
+                PUBLIC | STATIC | 0x800,
             ),
             object: NestedJvmObject(
                 ReferenceTypeID(2),
@@ -254,6 +412,94 @@ fn methods() -> Result {
             signature: "()V",
             mod_bits: MethodModifiers(
                 PUBLIC,
+            ),
+        },
+        Method {
+            method_id: MethodID(opaque),
+            name: "withGeneric",
+            signature: "(ILjava/util/function/IntSupplier;)V",
+            mod_bits: MethodModifiers(
+                STATIC,
+            ),
+        },
+    ]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn methods_generic() -> Result {
+    let mut client = common::launch_and_attach("basic")?;
+
+    let (type_id, _) = *client.send(ClassBySignature::new(OUR_CLS))?;
+
+    let mut methods = client.send(MethodsWithGeneric::new(*type_id))?;
+    methods.sort_by_key(|f| f.name.clone());
+
+    assert_snapshot!(methods, @r###"
+    [
+        MethodWithGeneric {
+            method_id: MethodID(opaque),
+            name: "<clinit>",
+            signature: "()V",
+            generic_signature: "",
+            mod_bits: MethodModifiers(
+                STATIC,
+            ),
+        },
+        MethodWithGeneric {
+            method_id: MethodID(opaque),
+            name: "<init>",
+            signature: "()V",
+            generic_signature: "",
+            mod_bits: MethodModifiers(
+                0x0,
+            ),
+        },
+        MethodWithGeneric {
+            method_id: MethodID(opaque),
+            name: "getAsInt",
+            signature: "()I",
+            generic_signature: "",
+            mod_bits: MethodModifiers(
+                PUBLIC,
+            ),
+        },
+        MethodWithGeneric {
+            method_id: MethodID(opaque),
+            name: "main",
+            signature: "([Ljava/lang/String;)V",
+            generic_signature: "",
+            mod_bits: MethodModifiers(
+                PUBLIC | STATIC,
+            ),
+        },
+        MethodWithGeneric {
+            method_id: MethodID(opaque),
+            name: "ping",
+            signature: "(Ljava/lang/Object;)V",
+            generic_signature: "",
+            mod_bits: MethodModifiers(
+                PRIVATE | STATIC,
+            ),
+        },
+        MethodWithGeneric {
+            method_id: MethodID(opaque),
+            name: "tick",
+            signature: "()V",
+            generic_signature: "",
+            mod_bits: MethodModifiers(
+                PUBLIC,
+            ),
+        },
+        MethodWithGeneric {
+            method_id: MethodID(opaque),
+            name: "withGeneric",
+            signature: "(ILjava/util/function/IntSupplier;)V",
+            generic_signature: "<T::Ljava/util/function/IntSupplier;>(ITT;)V",
+            mod_bits: MethodModifiers(
+                STATIC,
             ),
         },
     ]
@@ -492,6 +738,22 @@ fn class_file_version() -> Result {
 }
 
 #[test]
+fn superclass() -> Result {
+    let vm = common::launch_and_attach_vm("basic")?;
+    let (class_type, _) = vm.class_by_signature(OUR_CLS)?;
+
+    let superclass = class_type.unwrap_class().superclass()?.unwrap();
+    let supersuperclass = superclass.superclass()?;
+
+    assert_snapshot!(supersuperclass, @"None");
+
+    let superclass = superclass.signature()?;
+    assert_snapshot!(superclass, @r###""Ljava/lang/Object;""###);
+
+    Ok(())
+}
+
+#[test]
 fn constant_pool() -> Result {
     let mut client = common::launch_and_attach("basic")?;
 
@@ -581,12 +843,15 @@ fn constant_pool() -> Result {
         "Utf8(\"()V\")",
         "Utf8(\"()[Ljava/lang/Class;\")",
         "Utf8(\"(I)V\")",
+        "Utf8(\"(ILjava/util/function/IntSupplier;)V\")",
         "Utf8(\"(J)V\")",
         "Utf8(\"(Ljava/lang/Object;)V\")",
         "Utf8(\"(Ljava/lang/String;)Ljava/lang/Class;\")",
         "Utf8(\"(Ljava/lang/String;)V\")",
         "Utf8(\"(Ljava/lang/Throwable;)V\")",
         "Utf8(\"([Ljava/lang/String;)V\")",
+        "Utf8(\"<T::Ljava/util/function/IntSupplier;>(ITT;)V\")",
+        "Utf8(\"<T:Ljava/lang/Object;>Ljava/lang/Object;Ljava/util/function/IntSupplier;\")",
         "Utf8(\"<clinit>\")",
         "Utf8(\"<init>\")",
         "Utf8(\"Basic\")",
@@ -600,11 +865,14 @@ fn constant_pool() -> Result {
         "Utf8(\"InnerClasses\")",
         "Utf8(\"J\")",
         "Utf8(\"LBasic;\")",
+        "Utf8(\"LBasic<*>;\")",
+        "Utf8(\"LBasic<Ljava/lang/String;>;\")",
         "Utf8(\"LineNumberTable\")",
         "Utf8(\"Ljava/io/PrintStream;\")",
         "Utf8(\"Ljava/lang/String;\")",
         "Utf8(\"NestedClass\")",
         "Utf8(\"NestedInterface\")",
+        "Utf8(\"Signature\")",
         "Utf8(\"SourceFile\")",
         "Utf8(\"StackMapTable\")",
         "Utf8(\"exit\")",
@@ -636,6 +904,7 @@ fn constant_pool() -> Result {
         "Utf8(\"ticks\")",
         "Utf8(\"unused\")",
         "Utf8(\"up\")",
+        "Utf8(\"withGeneric\")",
     ]
     "###);
 

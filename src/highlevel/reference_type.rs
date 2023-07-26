@@ -132,7 +132,7 @@ impl ReferenceType {
             .send(SourceDebugExtension::new(self.id()))
     }
 
-    pub fn signature_with_generic(&self) -> Result<SignatureWithGenericReply, ClientError> {
+    pub fn signature_generic(&self) -> Result<SignatureWithGenericReply, ClientError> {
         self.client()
             .get()
             .send(SignatureWithGeneric::new(self.id()))
@@ -235,6 +235,27 @@ impl TaggedReferenceType {
     pub fn tag(&self) -> TypeTag {
         // SAFETY: Self and TypeTag fulfill the requirements
         unsafe { crate::spec::tag(self) }
+    }
+
+    pub fn unwrap_class(self) -> ClassType {
+        match self {
+            TaggedReferenceType::Class(class) => class,
+            _ => panic!("Expected a class"),
+        }
+    }
+
+    pub fn unwrap_interface(self) -> InterfaceType {
+        match self {
+            TaggedReferenceType::Interface(interface) => interface,
+            _ => panic!("Expected an interface"),
+        }
+    }
+
+    pub fn unwrap_array(self) -> ArrayType {
+        match self {
+            TaggedReferenceType::Array(array) => array,
+            _ => panic!("Expected an array"),
+        }
     }
 }
 

@@ -1,6 +1,9 @@
 use std::assert_eq;
 
-use jdwp::{highlevel::JvmObject, spec::virtual_machine::*};
+use jdwp::{
+    highlevel::JvmObject,
+    spec::{reference_type::InstanceLimit, virtual_machine::*},
+};
 
 mod common;
 
@@ -121,6 +124,72 @@ fn all_classes() -> Result {
             ),
             signature: "Ljava/util/List;",
             generic_signature: None,
+            status: ClassStatus(
+                VERIFIED | PREPARED | INITIALIZED,
+            ),
+        },
+        Class {
+            object: Array(
+                WrapperJvmObject(
+                    ArrayTypeID(opaque),
+                ),
+            ),
+            signature: "[I",
+            generic_signature: None,
+            status: ClassStatus(
+                0x0,
+            ),
+        },
+        Class {
+            object: Array(
+                WrapperJvmObject(
+                    ArrayTypeID(opaque),
+                ),
+            ),
+            signature: "[Ljava/lang/String;",
+            generic_signature: None,
+            status: ClassStatus(
+                0x0,
+            ),
+        },
+    ]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn all_classes_generic() -> Result {
+    let vm = common::launch_and_attach_vm("basic")?;
+
+    const CASES: &[&str] = &[
+        // "Ljava/lang/String;", has extra interfaces on jvm 17
+        "Ljava/util/List;",
+        "[I",
+        "[Ljava/lang/String;",
+    ];
+
+    let classes = vm.all_classes_generic()?;
+    let mut filtered = classes
+        .iter()
+        .filter_map(|c| CASES.contains(&&*c.signature).then_some(c))
+        .collect::<Vec<_>>();
+    filtered.sort_unstable_by_key(|c| &c.signature);
+
+    assert!(classes.len() > CASES.len());
+
+    assert_snapshot!(filtered, @r###"
+    [
+        Class {
+            object: Interface(
+                WrapperJvmObject(
+                    InterfaceID(opaque),
+                ),
+            ),
+            signature: "Ljava/util/List;",
+            generic_signature: Some(
+                "<E:Ljava/lang/Object;>Ljava/lang/Object;Ljava/util/Collection<TE;>;",
+            ),
             status: ClassStatus(
                 VERIFIED | PREPARED | INITIALIZED,
             ),
@@ -382,6 +451,24 @@ fn instance_counts() -> Result {
 
     assert_eq!(counts, [2, 0]);
     assert_eq!(counts2, [2, 0]);
+
+    Ok(())
+}
+
+#[test]
+fn dispose_object() -> Result {
+    let vm = common::launch_and_attach_vm("basic")?;
+
+    let (ref_type, _) = vm.class_by_signature("LBasic;")?;
+
+    let instance = ref_type
+        .instances(InstanceLimit::limit(1))?
+        .into_iter()
+        .next()
+        .unwrap();
+
+    // just a smoke too
+    instance.dispose_single()?;
 
     Ok(())
 }

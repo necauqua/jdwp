@@ -1,11 +1,11 @@
 import java.util.HashMap;
 import java.util.function.IntSupplier;
 
-class Basic implements IntSupplier {
+class Basic<T> implements IntSupplier {
 
     static int staticInt = 42;
-    public static Basic running = new Basic();
-    public static Basic secondInstance = new Basic();
+    public static Basic<String> running = new Basic<>();
+    public static Basic<?> secondInstance = new Basic<>();
 
     public long ticks = 0;
 
@@ -47,6 +47,9 @@ class Basic implements IntSupplier {
 
     private static void ping(Object ignored) {
         // noop lol
+    }
+
+    static <T extends IntSupplier> void withGeneric(int param1, T param2) {
     }
 
     class NestedClass {

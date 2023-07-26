@@ -6,6 +6,7 @@ use crate::{
         class_object_reference::ReflectedType,
         string_reference::Value,
         thread_group_reference::{self, Children, Parent},
+        virtual_machine::DisposeObjects,
         ArrayID, ArrayRegion, ClassLoaderID, ClassObjectID, JdwpValue, ObjectID, StringID, Tag,
         TaggedObjectID, ThreadGroupID,
     },
@@ -18,7 +19,17 @@ use super::{
 
 pub type ObjectReference = PlainJvmObject<ObjectID>;
 
-impl ObjectReference {}
+impl ObjectReference {
+    pub fn dispose_single(&self) -> Result<(), ClientError> {
+        self.dispose(1)
+    }
+
+    pub fn dispose(&self, refcount: u32) -> Result<(), ClientError> {
+        self.client()
+            .get()
+            .send(DisposeObjects::new(&[(self.id(), refcount)]))
+    }
+}
 
 pub type JvmArray = ExtendedJvmObject<ArrayID>;
 
